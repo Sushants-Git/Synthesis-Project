@@ -1,4 +1,4 @@
-import { Tldraw, type Editor, type TLShapeId } from '@tldraw/tldraw'
+import { Tldraw, DefaultStylePanel, type Editor, type TLShapeId } from '@tldraw/tldraw'
 import '@tldraw/tldraw/tldraw.css'
 import { useCallback, useRef, useState } from 'react'
 import FloatingPrompt from '../components/FloatingPrompt.tsx'
@@ -90,7 +90,14 @@ const SHAPE_UTILS = [FlowNodeShapeUtil]
 
 // Stable tldraw component overrides — must live outside the render function
 // so tldraw never remounts when these are passed as props.
-const TLDRAW_COMPONENTS_DEFAULT = {}
+function BottomRightStylePanel() {
+  return (
+    <div style={{ position: 'fixed', bottom: 56, right: 8, zIndex: 300 }}>
+      <DefaultStylePanel />
+    </div>
+  )
+}
+const TLDRAW_COMPONENTS_DEFAULT = { StylePanel: BottomRightStylePanel }
 const TLDRAW_COMPONENTS_NO_STYLE = { StylePanel: null }
 
 function recomputeFramePositions(editor: Editor): FrameButtonPos[] {
