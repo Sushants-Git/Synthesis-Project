@@ -323,29 +323,39 @@ export default function FlowCanvas() {
         )}
 
         {/* Persistent Execute / Modify buttons */}
-        {!promptState && !executingFlow && frameButtons.map((btn) => (
-          <div
-            key={btn.frameId}
-            className="fixed z-40 flex gap-1.5 animate-fade-up"
-            style={{
-              left: Math.max(btn.screenX, SIDEBAR_W + 8),
-              top: btn.screenY + 8,
-            }}
-          >
-            <button
-              onClick={() => openExecute(btn)}
-              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 active:scale-[0.96] text-white text-xs font-semibold rounded-lg shadow-md shadow-blue-200 transition-[transform,background-color] duration-150"
+        {!promptState && frameButtons.map((btn) => {
+          const executorW = executingFlow ? 400 : 0
+          const maxRight = window.innerWidth - executorW - 8
+          const rawLeft = Math.max(btn.screenX, SIDEBAR_W + 8)
+          const left = Math.min(rawLeft, maxRight - 180)
+          const isActive = executingFrameId === btn.frameId
+          return (
+            <div
+              key={btn.frameId}
+              className="fixed z-40 flex gap-1 animate-fade-up"
+              style={{ left, top: btn.screenY + 8 }}
             >
-              ⚡ Execute
-            </button>
-            <button
-              onClick={() => openModify(btn)}
-              className="px-3 py-1.5 bg-white hover:bg-zinc-50 active:scale-[0.96] border border-zinc-200 text-zinc-600 text-xs font-medium rounded-lg shadow-sm transition-[transform,background-color] duration-150"
-            >
-              Modify
-            </button>
-          </div>
-        ))}
+              <button
+                onClick={() => openExecute(btn)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold rounded-lg shadow-sm transition-[transform,background-color,box-shadow] duration-150 active:scale-[0.96] ${
+                  isActive
+                    ? 'bg-zinc-900 hover:bg-zinc-800 text-white shadow-zinc-900/20'
+                    : 'bg-zinc-900 hover:bg-zinc-800 text-white shadow-zinc-900/20'
+                }`}
+              >
+                <svg width="9" height="9" viewBox="0 0 9 9" fill="none"><polygon points="1.5,0.5 8.5,4.5 1.5,8.5" fill="currentColor"/></svg>
+                Execute
+              </button>
+              <button
+                onClick={() => openModify(btn)}
+                className="flex items-center gap-1 px-3 py-1.5 text-[11px] font-medium rounded-lg bg-white/90 hover:bg-white border border-zinc-200 hover:border-zinc-300 text-zinc-600 hover:text-zinc-900 shadow-sm backdrop-blur-sm transition-[transform,background-color,border-color,color] duration-150 active:scale-[0.96]"
+              >
+                <svg width="9" height="9" viewBox="0 0 9 9" fill="none"><path d="M1 8L6.5 1.5L8 3L2.5 8.5L1 8Z" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round"/><path d="M5.5 2.5L7 4" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg>
+                Modify
+              </button>
+            </div>
+          )
+        })}
 
         {/* Floating prompt with conversation thread */}
         {promptState && (
