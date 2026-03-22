@@ -38,111 +38,99 @@ const EXAMPLE_PROMPTS: Record<string, string[]> = {
   ],
 }
 
+function ChevronRight({ open }: { open: boolean }) {
+  return (
+    <svg
+      width="10" height="10" viewBox="0 0 10 10" fill="none"
+      style={{ transform: open ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 200ms cubic-bezier(0.215,0.61,0.355,1)', flexShrink: 0 }}
+    >
+      <path d="M3.5 2L6.5 5L3.5 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  )
+}
+
 function PluginRow({
-  plugin,
-  isOpen,
-  isCustom,
-  isSoft,
-  onToggle,
-  onPrompt,
-  onAddBlock,
-  onEdit,
-  onRemove,
+  plugin, isOpen, isSoft, onToggle, onPrompt, onAddBlock, onEdit, onRemove,
 }: {
-  plugin: Plugin
-  isOpen: boolean
-  isCustom: boolean
-  isSoft: boolean
-  onToggle: () => void
-  onPrompt: (p: string) => void
+  plugin: Plugin; isOpen: boolean; isSoft: boolean
+  onToggle: () => void; onPrompt: (p: string) => void
   onAddBlock: (pid: string, action: string) => void
-  onEdit: () => void
-  onRemove: () => void
+  onEdit: () => void; onRemove: () => void
 }) {
   const examples = EXAMPLE_PROMPTS[plugin.id] ?? []
 
   return (
-    <div>
+    <div className="rounded-lg overflow-hidden">
       <button
         onClick={onToggle}
-        className="w-full flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-zinc-100 transition-[background-color] duration-150 text-left group active:scale-[0.98]"
+        className={`w-full flex items-center gap-2.5 px-2.5 py-2 text-left transition-colors duration-100 group ${
+          isOpen ? 'bg-zinc-100' : 'hover:bg-zinc-50'
+        }`}
       >
-        <PluginIcon icon={plugin.icon} size={16} />
+        <div className={`w-6 h-6 rounded-md flex items-center justify-center shrink-0 transition-colors duration-100 ${
+          isOpen ? 'bg-white shadow-sm' : 'bg-zinc-100 group-hover:bg-white group-hover:shadow-sm'
+        }`}>
+          <PluginIcon icon={plugin.icon} size={13} />
+        </div>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1">
-            <div className="text-xs font-medium text-zinc-700 group-hover:text-zinc-900 truncate transition-colors duration-150">
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] font-medium text-zinc-700 group-hover:text-zinc-900 truncate transition-colors duration-100">
               {plugin.name}
-            </div>
+            </span>
             {isSoft && (
-              <span className="text-[8px] text-emerald-600 bg-emerald-50 border border-emerald-100 rounded-full px-1 leading-4 shrink-0">
+              <span className="text-[8px] text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-full px-1.5 leading-4 shrink-0 font-medium">
                 mine
-              </span>
-            )}
-            {isCustom && !isSoft && (
-              <span className="text-[8px] text-blue-500 bg-blue-50 border border-blue-100 rounded-full px-1 leading-4 shrink-0">
-                custom
               </span>
             )}
           </div>
           {plugin.prizeTrack && (
-            <div className="text-[9px] text-zinc-400 truncate leading-tight">
-              🏆 {plugin.prizeTrack.split('(')[0].trim()}
+            <div className="text-[9px] text-zinc-400 truncate leading-tight mt-0.5">
+              {plugin.prizeTrack.split('(')[0].trim()}
             </div>
           )}
         </div>
-        <span
-          className="text-zinc-400 text-xs shrink-0 transition-transform duration-200"
-          style={{ transform: isOpen ? 'rotate(90deg)' : 'rotate(0deg)' }}
-        >
-          ›
+        <span className="text-zinc-300 group-hover:text-zinc-400 transition-colors duration-100">
+          <ChevronRight open={isOpen} />
         </span>
       </button>
 
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateRows: isOpen ? '1fr' : '0fr',
-          transition: 'grid-template-rows 200ms cubic-bezier(0.215, 0.61, 0.355, 1)',
-        }}
-      >
+      <div style={{
+        display: 'grid',
+        gridTemplateRows: isOpen ? '1fr' : '0fr',
+        transition: 'grid-template-rows 200ms cubic-bezier(0.215,0.61,0.355,1)',
+      }}>
         <div className="overflow-hidden">
-          <div className="ml-8 mt-1 mb-2 space-y-1.5 pb-0.5">
-            <p className="text-[10px] text-zinc-500 leading-snug">{plugin.description}</p>
+          <div className="px-2.5 pb-2.5 pt-1 bg-zinc-50 border-t border-zinc-100 space-y-2.5">
+            <p className="text-[10px] text-zinc-500 leading-relaxed">{plugin.description}</p>
 
-            <div className="space-y-1">
-              <div className="text-[9px] text-zinc-400 uppercase tracking-widest font-medium">
-                Capabilities
-              </div>
+            <div className="space-y-0.5">
+              <div className="text-[9px] text-zinc-400 uppercase tracking-widest font-semibold mb-1">Actions</div>
               {plugin.capabilities.map((cap) => (
                 <button
                   key={cap.action}
                   onClick={() => onAddBlock(plugin.id, cap.action)}
-                  title="Add block to canvas"
-                  className="w-full flex items-start gap-1.5 py-0.5 text-left group/cap rounded hover:bg-zinc-50 transition-colors duration-100 active:scale-[0.97]"
+                  title="Add to canvas"
+                  className="w-full flex items-center gap-2 py-1 px-2 text-left rounded-md hover:bg-white hover:shadow-sm transition-[background-color,box-shadow] duration-100 active:scale-[0.97] group/cap"
                 >
-                  <span className="text-zinc-300 shrink-0 mt-[1px] group-hover/cap:text-zinc-400 transition-colors">
-                    ·
-                  </span>
-                  <span className="text-[10px] text-zinc-500 group-hover/cap:text-zinc-700 flex-1 transition-colors">
+                  <span className="w-1 h-1 rounded-full bg-zinc-300 group-hover/cap:bg-blue-400 shrink-0 transition-colors duration-100" />
+                  <span className="text-[10px] text-zinc-500 group-hover/cap:text-zinc-800 flex-1 transition-colors duration-100">
                     {cap.label}
                   </span>
-                  <span className="text-[9px] text-zinc-300 group-hover/cap:text-blue-400 shrink-0 transition-colors pr-1">
-                    +
+                  <span className="text-[9px] text-zinc-300 group-hover/cap:text-blue-500 shrink-0 font-medium transition-colors duration-100">
+                    + add
                   </span>
                 </button>
               ))}
             </div>
 
             {examples.length > 0 && (
-              <div className="space-y-1">
-                <div className="text-[9px] text-zinc-400 uppercase tracking-widest font-medium">
-                  Try
-                </div>
+              <div className="space-y-0.5">
+                <div className="text-[9px] text-zinc-400 uppercase tracking-widest font-semibold mb-1">Try asking</div>
                 {examples.map((ex) => (
                   <button
                     key={ex}
                     onClick={() => onPrompt(ex)}
-                    className="w-full text-left text-[10px] text-blue-600 hover:text-blue-800 leading-snug py-0.5 transition-colors duration-100 active:scale-[0.97]"
+                    className="w-full text-left text-[10px] text-blue-500 hover:text-blue-700 leading-relaxed py-0.5 px-2 rounded hover:bg-blue-50 transition-[background-color,color] duration-100 active:scale-[0.97]"
                   >
                     "{ex}"
                   </button>
@@ -150,19 +138,12 @@ function PluginRow({
               </div>
             )}
 
-            {(isCustom || isSoft) && (
-              <div className="flex items-center gap-2 mt-0.5">
-                <button
-                  onClick={onEdit}
-                  className="text-[9px] text-blue-500 hover:text-blue-700 transition-colors duration-100"
-                >
+            {isSoft && (
+              <div className="flex items-center gap-3 pt-0.5 px-1">
+                <button onClick={onEdit} className="text-[10px] text-blue-500 hover:text-blue-700 font-medium transition-colors duration-100">
                   Edit
                 </button>
-                <span className="text-zinc-200 text-[9px]">·</span>
-                <button
-                  onClick={onRemove}
-                  className="text-[9px] text-red-400 hover:text-red-600 transition-colors duration-100"
-                >
+                <button onClick={onRemove} className="text-[10px] text-red-400 hover:text-red-600 transition-colors duration-100">
                   Remove
                 </button>
               </div>
@@ -170,14 +151,6 @@ function PluginRow({
           </div>
         </div>
       </div>
-    </div>
-  )
-}
-
-function SectionHeader({ label }: { label: string }) {
-  return (
-    <div className="text-[9px] text-zinc-400 uppercase tracking-widest mb-1.5 px-1 font-medium">
-      {label}
     </div>
   )
 }
@@ -203,17 +176,12 @@ export default function PluginSidebar({ onPrompt, onAddBlock }: Props) {
     setExpanded(def.id)
   }
 
-  const closeAll = () => {
-    setShowBuilder(false)
-    setEditingSoftDef(null)
-  }
-
   const toggle = (id: string) => setExpanded((prev) => (prev === id ? null : id))
 
   return (
     <>
       <div
-        className="fixed left-0 top-0 h-full w-56 z-30 flex flex-col bg-white border-r border-zinc-200 overflow-y-auto"
+        className="fixed left-0 top-0 h-full w-56 z-30 flex flex-col bg-white border-r border-zinc-100 overflow-y-auto"
         onKeyDown={(e) => e.stopPropagation()}
         onKeyUp={(e) => e.stopPropagation()}
         onCopy={(e) => e.stopPropagation()}
@@ -221,13 +189,13 @@ export default function PluginSidebar({ onPrompt, onAddBlock }: Props) {
         onPaste={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="px-4 py-4 border-b border-zinc-200 shrink-0">
-          <div className="flex items-center gap-2">
-            <div className="w-5 h-5 rounded-md bg-blue-600 flex items-center justify-center shrink-0">
-              <span className="text-white text-[10px] font-black leading-none">F</span>
+        <div className="px-4 pt-5 pb-4 shrink-0">
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-lg bg-zinc-900 flex items-center justify-center shrink-0">
+              <span className="text-white text-[11px] font-black leading-none tracking-tight">F</span>
             </div>
             <div>
-              <div className="text-xs font-bold text-zinc-900 tracking-widest uppercase leading-none">
+              <div className="text-[11px] font-bold text-zinc-900 tracking-widest uppercase leading-none">
                 FlowTx
               </div>
               <div className="text-[9px] text-zinc-400 mt-0.5 leading-none">visual tx builder</div>
@@ -235,20 +203,23 @@ export default function PluginSidebar({ onPrompt, onAddBlock }: Props) {
           </div>
         </div>
 
+        <div className="h-px bg-zinc-100 mx-4 shrink-0" />
+
         {/* Plugin sections */}
-        <div className="px-3 pt-3 pb-2 flex-1">
+        <div className="px-3 pt-4 pb-2 flex-1">
           <span className="hidden">{pluginVersion}</span>
 
-          {/* ── Core (hard) plugins ── */}
-          <div className="mb-3">
-            <SectionHeader label="Core Plugins" />
+          {/* Core plugins */}
+          <div className="mb-4">
+            <div className="text-[9px] text-zinc-400 uppercase tracking-widest font-semibold mb-2 px-1">
+              Core Plugins
+            </div>
             <div className="space-y-0.5">
               {hardPlugins.map((plugin) => (
                 <PluginRow
                   key={plugin.id}
                   plugin={plugin}
                   isOpen={expanded === plugin.id}
-                  isCustom={false}
                   isSoft={false}
                   onToggle={() => toggle(plugin.id)}
                   onPrompt={onPrompt}
@@ -260,17 +231,18 @@ export default function PluginSidebar({ onPrompt, onAddBlock }: Props) {
             </div>
           </div>
 
-          {/* ── Soft (user-built) plugins ── */}
+          {/* User plugins */}
           {softPlugins.length > 0 && (
-            <div className="mb-3">
-              <SectionHeader label="My Plugins" />
+            <div className="mb-4">
+              <div className="text-[9px] text-zinc-400 uppercase tracking-widest font-semibold mb-2 px-1">
+                My Plugins
+              </div>
               <div className="space-y-0.5">
                 {softPlugins.map((plugin) => (
                   <PluginRow
                     key={plugin.id}
                     plugin={plugin}
                     isOpen={expanded === plugin.id}
-                    isCustom={false}
                     isSoft={true}
                     onToggle={() => toggle(plugin.id)}
                     onPrompt={onPrompt}
@@ -291,63 +263,46 @@ export default function PluginSidebar({ onPrompt, onAddBlock }: Props) {
           )}
         </div>
 
-        {/* Divider */}
-        <div className="border-t border-zinc-100 mx-3 my-2" />
-
-        {/* Action buttons */}
-        <div className="px-3 pb-3 space-y-1.5">
-          {/* Build Plugin — opens the soft plugin builder */}
+        {/* Build plugin button */}
+        <div className="px-3 pb-3">
           <button
             onClick={() => { setEditingSoftDef(null); setShowBuilder(true) }}
-            className="w-full flex items-center gap-2 border border-dashed border-emerald-300 hover:border-emerald-500 hover:bg-emerald-50/60 rounded-lg py-2 px-3 text-[10px] text-emerald-600 hover:text-emerald-700 transition-[color,border-color,background-color] duration-150 active:scale-[0.98]"
+            className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 active:scale-[0.98] transition-[background-color,transform] duration-150 group"
           >
-            <span className="text-sm leading-none">🧩</span>
-            <span className="font-medium">Build Plugin</span>
-            <span className="ml-auto text-emerald-400 text-[9px]">API chain →</span>
+            <div className="w-5 h-5 rounded-md bg-white/10 flex items-center justify-center shrink-0">
+              <span className="text-xs leading-none">🧩</span>
+            </div>
+            <span className="text-[11px] font-semibold text-white flex-1 text-left">Build Plugin</span>
+            <span className="text-zinc-500 text-[10px] group-hover:text-zinc-400 transition-colors duration-100">API →</span>
           </button>
-
         </div>
 
-        {/* Hints */}
-        <div className="px-4 pb-4 space-y-2">
-          <div className="text-[9px] text-zinc-400 uppercase tracking-widest font-medium">
-            How to use
-          </div>
-          <div className="space-y-2 text-[10px] text-zinc-500">
-            <div className="flex items-center gap-2">
-              <kbd className="px-1.5 py-0.5 bg-zinc-100 border border-zinc-200 rounded text-[9px] text-zinc-500 font-mono shrink-0">
-                F
-              </kbd>
-              <span>draw a frame, describe a flow</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <kbd className="px-1.5 py-0.5 bg-zinc-100 border border-zinc-200 rounded text-[9px] text-zinc-500 font-mono shrink-0">
-                2×
-              </kbd>
-              <span>double-click canvas for quick prompt</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <kbd className="px-1.5 py-0.5 bg-zinc-100 border border-zinc-200 rounded text-[9px] text-zinc-500 font-mono shrink-0">
-                +
-              </kbd>
-              <span>click capability to add block</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <kbd className="px-1.5 py-0.5 bg-zinc-100 border border-zinc-200 rounded text-[9px] text-zinc-500 font-mono shrink-0">
-                ⚡
-              </kbd>
-              <span>Execute to run the flow</span>
-            </div>
+        {/* How to use */}
+        <div className="px-4 pb-5">
+          <div className="text-[9px] text-zinc-400 uppercase tracking-widest font-semibold mb-2">How to use</div>
+          <div className="space-y-1.5">
+            {[
+              { key: 'F', hint: 'draw a frame, describe a flow' },
+              { key: '2×', hint: 'double-click for quick prompt' },
+              { key: '+', hint: 'click action to add block' },
+              { key: '⚡', hint: 'Execute to run the flow' },
+            ].map(({ key, hint }) => (
+              <div key={key} className="flex items-center gap-2">
+                <kbd className="min-w-[22px] px-1.5 py-0.5 bg-zinc-100 border border-zinc-200 rounded text-[9px] text-zinc-500 font-mono text-center shrink-0">
+                  {key}
+                </kbd>
+                <span className="text-[10px] text-zinc-400">{hint}</span>
+              </div>
+            ))}
           </div>
         </div>
       </div>
 
-      {/* Soft plugin builder */}
       {showBuilder && (
         <PluginBuilder
           initial={editingSoftDef ?? undefined}
           onSave={handleSaveSoftPlugin}
-          onClose={closeAll}
+          onClose={() => { setShowBuilder(false); setEditingSoftDef(null) }}
         />
       )}
     </>
