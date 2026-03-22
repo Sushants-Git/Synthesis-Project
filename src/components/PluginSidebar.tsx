@@ -1,17 +1,12 @@
 import { useState } from 'react'
 import {
   getPluginList,
-  registerPluginFromManifest,
-  removeCustomPlugin,
-  loadSavedManifests,
   registerSoftPlugin,
   removeSoftPluginById,
   loadSoftPluginDefs,
-  type PluginManifest,
   type Plugin,
   type SoftPluginDef,
 } from '../plugins/registry.ts'
-import AddPluginModal from './AddPluginModal.tsx'
 import PluginBuilder from './PluginBuilder.tsx'
 
 interface Props {
@@ -188,29 +183,16 @@ function SectionHeader({ label }: { label: string }) {
 
 export default function PluginSidebar({ onPrompt, onAddBlock }: Props) {
   const [expanded, setExpanded] = useState<string | null>(null)
-  const [showAddModal, setShowAddModal] = useState(false)
   const [showBuilder, setShowBuilder] = useState(false)
-  const [editingManifest, setEditingManifest] = useState<PluginManifest | null>(null)
   const [editingSoftDef, setEditingSoftDef] = useState<SoftPluginDef | null>(null)
   const [pluginVersion, setPluginVersion] = useState(0)
 
   const plugins = getPluginList()
-  const savedManifests = loadSavedManifests()
   const softDefs = loadSoftPluginDefs()
-  const customManifestMap = new Map(savedManifests.map((m) => [m.id, m]))
   const softDefMap = new Map(softDefs.map((d) => [d.id, d]))
 
   const hardPlugins = plugins.filter((p) => p.category === 'hard')
   const softPlugins = plugins.filter((p) => p.category === 'soft')
-  const manifestPlugins = plugins.filter((p) => !p.category && customManifestMap.has(p.id))
-
-  const handleAddManifest = (manifest: PluginManifest) => {
-    registerPluginFromManifest(manifest)
-    setPluginVersion((v) => v + 1)
-    setShowAddModal(false)
-    setEditingManifest(null)
-    setExpanded(manifest.id)
-  }
 
   const handleSaveSoftPlugin = (def: SoftPluginDef) => {
     registerSoftPlugin(def)
@@ -221,9 +203,7 @@ export default function PluginSidebar({ onPrompt, onAddBlock }: Props) {
   }
 
   const closeAll = () => {
-    setShowAddModal(false)
     setShowBuilder(false)
-    setEditingManifest(null)
     setEditingSoftDef(null)
   }
 
@@ -273,7 +253,7 @@ export default function PluginSidebar({ onPrompt, onAddBlock }: Props) {
           </div>
 
           {/* ── Soft (user-built) plugins ── */}
-          {(softPlugins.length > 0 || manifestPlugins.length > 0) && (
+          {softPlugins.length > 0 && (
             <div className="mb-3">
               <SectionHeader label="My Plugins" />
               <div className="space-y-0.5">
@@ -293,27 +273,6 @@ export default function PluginSidebar({ onPrompt, onAddBlock }: Props) {
                     }}
                     onRemove={() => {
                       removeSoftPluginById(plugin.id)
-                      setPluginVersion((v) => v + 1)
-                      if (expanded === plugin.id) setExpanded(null)
-                    }}
-                  />
-                ))}
-                {manifestPlugins.map((plugin) => (
-                  <PluginRow
-                    key={plugin.id}
-                    plugin={plugin}
-                    isOpen={expanded === plugin.id}
-                    isCustom={true}
-                    isSoft={false}
-                    onToggle={() => toggle(plugin.id)}
-                    onPrompt={onPrompt}
-                    onAddBlock={onAddBlock}
-                    onEdit={() => {
-                      const manifest = customManifestMap.get(plugin.id)
-                      if (manifest) setEditingManifest(manifest)
-                    }}
-                    onRemove={() => {
-                      removeCustomPlugin(plugin.id)
                       setPluginVersion((v) => v + 1)
                       if (expanded === plugin.id) setExpanded(null)
                     }}
@@ -339,14 +298,6 @@ export default function PluginSidebar({ onPrompt, onAddBlock }: Props) {
             <span className="ml-auto text-emerald-400 text-[9px]">API chain →</span>
           </button>
 
-          {/* Import manifest */}
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="w-full flex items-center justify-center gap-1.5 border border-dashed border-zinc-300 hover:border-blue-400 hover:bg-blue-50/60 rounded-lg py-2 text-[10px] text-zinc-400 hover:text-blue-600 transition-[color,border-color,background-color] duration-150 active:scale-[0.98]"
-          >
-            <span className="text-sm leading-none">+</span>
-            <span>Import Plugin</span>
-          </button>
         </div>
 
         {/* Hints */}
@@ -382,15 +333,6 @@ export default function PluginSidebar({ onPrompt, onAddBlock }: Props) {
           </div>
         </div>
       </div>
-
-      {/* Import manifest modal */}
-      {(showAddModal || editingManifest) && (
-        <AddPluginModal
-          onAdd={handleAddManifest}
-          onClose={closeAll}
-          initialManifest={editingManifest ?? undefined}
-        />
-      )}
 
       {/* Soft plugin builder */}
       {showBuilder && (
