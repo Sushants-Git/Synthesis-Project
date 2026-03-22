@@ -1,53 +1,38 @@
-import { createShapeId, toRichText, type Editor, type TLShapeId } from '@tldraw/tldraw'
+import { createShapeId, type Editor, type TLShapeId } from '@tldraw/tldraw'
 import type { FlowSpec, FlowNode } from '../ai/flowParser.ts'
 import { getPlugin } from '../plugins/registry.ts'
+import { PLUGIN_CSS_COLORS } from './FlowNodeShape.tsx'
 
 const NODE_W = 200
-const NODE_H = 80
-const H_GAP = 90
-const PADDING = 32
-const HEADER_H = 36
+const H_GAP = 80
+const V_PADDING = 28
+const H_PADDING = 32
 
-function pluginColor(node: FlowNode): string {
-  const plugin = getPlugin(node.plugin)
-  if (plugin) return plugin.color
-  // fallback for system nodes
-  if (node.action === 'output') return 'light-blue'
-  if (node.action === 'filter') return 'red'
-  return 'grey'
+/** Height of a node card depending on how many params it has */
+function nodeHeight(node: FlowNode): number {
+  const paramCount = Object.values(node.params ?? {}).filter(Boolean).length
+  const base = 82
+  return paramCount > 0 ? base + Math.min(paramCount, 3) * 18 : base
 }
 
-function pluginIcon(node: FlowNode): string {
+function resolveAccentColor(node: FlowNode): string {
   const plugin = getPlugin(node.plugin)
-  return plugin?.icon ?? '▸'
-}
-
-function nodeLabel(node: FlowNode): string {
-  const icon = pluginIcon(node)
-  const title = `${icon} ${node.label}`
-  const params = node.params ?? {}
-
-  const highlights: string[] = []
-  if (params.amount) highlights.push(`${params.amount} ETH`)
-  if (params.to) highlights.push(`→ ${params.to}`)
-  if (params.ens_name) highlights.push(params.ens_name)
-  if (params.query) highlights.push(`"${params.query}"`)
-  if (params.max_amount) highlights.push(`max ${params.max_amount} ETH`)
-  if (params.credential) highlights.push(params.credential)
-
-  return highlights.length > 0 ? `${title}\n${highlights.join('  ')}` : title
+  if (!plugin) return PLUGIN_CSS_COLORS['grey']!
+  return PLUGIN_CSS_COLORS[plugin.color] ?? '#6b7280'
 }
 
 export function renderFlowIntoFrame(editor: Editor, flow: FlowSpec, frameId: TLShapeId) {
   const frame = editor.getShape(frameId)
   if (!frame) return
 
+  // Clear existing children
   const children = editor.getSortedChildIdsForParent(frameId)
   if (children.length > 0) editor.deleteShapes(children)
 
   const nodeCount = flow.nodes.length
-  const totalW = nodeCount * NODE_W + (nodeCount - 1) * H_GAP + PADDING * 2
-  const totalH = NODE_H + PADDING * 2 + HEADER_H
+  const maxH = Math.max(...flow.nodes.map(nodeHeight))
+  const totalW = nodeCount * NODE_W + (nodeCount - 1) * H_GAP + H_PADDING * 2
+  const totalH = maxH + V_PADDING * 2
 
   editor.updateShape({
     id: frameId,
@@ -55,44 +40,50 @@ export function renderFlowIntoFrame(editor: Editor, flow: FlowSpec, frameId: TLS
     props: { w: totalW, h: totalH, name: flow.title },
   })
 
-  const posMap: Record<string, { x: number; y: number }> = {}
+  // Track per-node positions (relative to frame) for arrow routing
+  const posMap: Record<string, { x: number; y: number; h: number }> = {}
 
   flow.nodes.forEach((node, i) => {
-    const x = PADDING + i * (NODE_W + H_GAP)
-    const y = PADDING
-    posMap[node.id] = { x, y }
+    const h = nodeHeight(node)
+    const x = H_PADDING + i * (NODE_W + H_GAP)
+    // Vertically centre nodes within the frame
+    const y = V_PADDING + (maxH - h) / 2
+    posMap[node.id] = { x, y, h }
 
-    const isApproval = node.action === 'approve' || node.action === 'user_approval'
-    editor.createShape({
+    const plugin = getPlugin(node.plugin)
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    editor.createShape<any>({
       id: createShapeId(`${frameId}-${node.id}`),
-      type: 'geo',
+      type: 'flow-node',
       parentId: frameId,
       x,
       y,
       props: {
-        geo: isApproval ? 'diamond' : 'rectangle',
         w: NODE_W,
-        h: isApproval ? NODE_H * 1.3 : NODE_H,
-        richText: toRichText(nodeLabel(node)),
-        fill: 'solid',
-        color: pluginColor(node),
-        size: 's',
-        font: 'sans',
-        align: 'middle',
-        verticalAlign: 'middle',
+        h,
+        plugin: node.plugin,
+        pluginName: plugin?.name ?? 'System',
+        action: node.action,
+        label: node.label,
+        description: node.description,
+        params: node.params ?? {},
+        icon: plugin?.icon ?? '▸',
+        accentColor: resolveAccentColor(node),
       },
     })
   })
 
+  // Draw arrows between nodes
   flow.edges.forEach((edge) => {
-    const fromPos = posMap[edge.from]
-    const toPos = posMap[edge.to]
-    if (!fromPos || !toPos) return
+    const from = posMap[edge.from]
+    const to = posMap[edge.to]
+    if (!from || !to) return
 
-    const sx = fromPos.x + NODE_W
-    const sy = fromPos.y + NODE_H / 2
-    const ex = toPos.x
-    const ey = toPos.y + NODE_H / 2
+    const sx = from.x + NODE_W
+    const sy = from.y + from.h / 2
+    const ex = to.x
+    const ey = to.y + to.h / 2
 
     editor.createShape({
       id: createShapeId(`${frameId}-arrow-${edge.from}-${edge.to}`),

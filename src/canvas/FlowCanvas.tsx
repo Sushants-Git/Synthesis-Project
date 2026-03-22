@@ -6,6 +6,8 @@ import FlowExecutor from '../components/FlowExecutor.tsx'
 import PluginSidebar from '../components/PluginSidebar.tsx'
 import { parseIntent, type FlowSpec } from '../ai/flowParser.ts'
 import { renderFlowIntoFrame, renderFlowAtPoint } from './renderFlow.ts'
+import { FlowNodeShapeUtil } from './FlowNodeShape.tsx'
+import { EXAMPLE_FLOW } from './exampleFlow.ts'
 
 interface PromptState {
   screenX: number
@@ -22,6 +24,9 @@ const flowFrameIds = new Set<string>()
 // Sidebar is 224px wide — offset tldraw canvas to avoid overlap
 const SIDEBAR_W = 224
 
+// Register custom shape utils once (stable reference — must not be re-created on render)
+const SHAPE_UTILS = [FlowNodeShapeUtil]
+
 export default function FlowCanvas() {
   const editorRef = useRef<Editor | null>(null)
   const [promptState, setPromptState] = useState<PromptState | null>(null)
@@ -34,6 +39,26 @@ export default function FlowCanvas() {
 
   const handleMount = useCallback((editor: Editor) => {
     editorRef.current = editor
+
+    // Render example flow at the center of the initial viewport
+    const vp = editor.getViewportScreenBounds()
+    const cx = SIDEBAR_W + (vp.w - SIDEBAR_W) / 2
+    const cy = vp.h / 2
+    const pagePos = editor.screenToPage({ x: cx, y: cy })
+
+    // Rough frame width so we can centre it
+    const nodeCount = EXAMPLE_FLOW.nodes.length
+    const approxFrameW = nodeCount * 200 + (nodeCount - 1) * 80 + 64
+    const approxFrameH = 140
+
+    const exampleId = renderFlowAtPoint(
+      editor,
+      EXAMPLE_FLOW,
+      pagePos.x - approxFrameW / 2,
+      pagePos.y - approxFrameH / 2,
+    )
+    flowFrameIds.add(exampleId)
+    flowSpecMap.set(exampleId, EXAMPLE_FLOW)
 
     editor.store.listen((entry) => {
       if (entry.source === 'user') {
@@ -73,7 +98,6 @@ export default function FlowCanvas() {
     (e: React.MouseEvent<HTMLDivElement>) => {
       const editor = editorRef.current
       if (!editor || promptState) return
-      // Ignore clicks inside sidebar
       if (e.clientX < SIDEBAR_W) return
 
       const pagePos = editor.screenToPage({ x: e.clientX, y: e.clientY })
@@ -85,7 +109,6 @@ export default function FlowCanvas() {
     [promptState, openPromptAt],
   )
 
-  /** Called from sidebar example prompts — place at viewport center */
   const handleSidebarPrompt = useCallback(
     (prompt: string) => {
       const editor = editorRef.current
@@ -95,8 +118,6 @@ export default function FlowCanvas() {
       const cy = vp.h / 2
       const pagePos = editor.screenToPage({ x: cx, y: cy })
       setPromptState({ screenX: cx, screenY: cy, mode: 'create', pageX: pagePos.x, pageY: pagePos.y })
-      // Auto-fill the prompt — the FloatingPrompt needs an initial value; pass via a ref trick
-      // For simplicity, just open the prompt with a pre-filled query
       pendingAutoPromptRef.current = prompt
     },
     [],
@@ -156,7 +177,7 @@ export default function FlowCanvas() {
         style={{ marginLeft: SIDEBAR_W }}
         onDoubleClick={handleDoubleClick}
       >
-        <Tldraw onMount={handleMount} />
+        <Tldraw onMount={handleMount} shapeUtils={SHAPE_UTILS} />
 
         {/* Error toast */}
         {error && (
