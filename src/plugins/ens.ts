@@ -34,24 +34,29 @@ export const ENSPlugin: Plugin = {
   async execute(action, params, ctx: ExecutionContext): Promise<PluginResult> {
     switch (action) {
       case 'resolve_name': {
-        const name = params.ens_name ?? ctx.inputs.ens_name ?? ctx.resolved.ens_name
+        const name =
+          params.ens_name ?? params.name ?? params.input ??
+          ctx.inputs.ens_name ?? ctx.inputs.name ??
+          ctx.resolved.ens_name ?? ctx.resolved.name
         if (!name) return { status: 'error', error: 'ENS name required' }
 
         const address = await resolveENS(name)
         if (!address) return { status: 'error', error: `Could not resolve ${name}` }
 
+        // Store under multiple keys so any downstream plugin can find it
         ctx.resolved.resolved_address = address
-        ctx.resolved.ens_name = name
+        ctx.resolved.ens_resolved = address
         ctx.resolved.to = address
+        ctx.resolved.ens_name = name
         return {
           status: 'done',
-          outputs: { resolved_address: address, ens_name: name },
+          outputs: { resolved_address: address, ens_name: name, to: address },
           display: `${name} → ${address.slice(0, 6)}…${address.slice(-4)}`,
         }
       }
 
       case 'lookup_address': {
-        const address = params.address ?? ctx.inputs.address ?? ctx.resolved.wallet_address
+        const address = params.address ?? params.wallet ?? ctx.inputs.address ?? ctx.resolved.wallet_address ?? ctx.resolved.resolved_address
         if (!address) return { status: 'error', error: 'Address required' }
 
         const name = await lookupAddress(address)

@@ -66,8 +66,13 @@ export const MetaMaskPlugin: Plugin = {
       }
 
       case 'send_eth': {
-        const to = ctx.resolved.resolved_address ?? ctx.resolved.to ?? params.to ?? ctx.inputs.to
-        const amount = params.amount ?? ctx.inputs.amount
+        const to =
+          ctx.resolved.resolved_address ?? ctx.resolved.to ?? ctx.resolved.ens_resolved ??
+          params.to ?? params.recipient ?? params.address ??
+          ctx.inputs.to ?? ctx.inputs.recipient
+        const amount =
+          params.amount ?? params.value ?? params.eth ??
+          ctx.inputs.amount ?? ctx.inputs.value
         const from = ctx.walletAddress ?? ctx.resolved.wallet_address
 
         if (!to) return { status: 'error', error: 'Recipient address required' }
