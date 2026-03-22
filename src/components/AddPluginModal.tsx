@@ -4,6 +4,8 @@ import type { PluginManifest } from '../plugins/registry.ts'
 interface Props {
   onAdd: (manifest: PluginManifest) => void
   onClose: () => void
+  /** When set, the modal opens in edit mode pre-populated with the existing manifest */
+  initialManifest?: PluginManifest
 }
 
 // ─── Templates ───────────────────────────────────────────────────────────────
@@ -233,9 +235,14 @@ const TEMPLATES = [
   { key: 'my-plugin', label: 'Custom', icon: '⚡', tagline: 'Start from scratch', manifest: TEMPLATE_BLANK },
 ]
 
-export default function AddPluginModal({ onAdd, onClose }: Props) {
+export default function AddPluginModal({ onAdd, onClose, initialManifest }: Props) {
+  const isEditMode = !!initialManifest
   const [selectedTemplate, setSelectedTemplate] = useState('google-sheets')
-  const [jsonValue, setJsonValue] = useState(JSON.stringify(TEMPLATE_GOOGLE_SHEETS, null, 2))
+  const [jsonValue, setJsonValue] = useState(
+    initialManifest
+      ? JSON.stringify(initialManifest, null, 2)
+      : JSON.stringify(TEMPLATE_GOOGLE_SHEETS, null, 2),
+  )
   const [validationError, setValidationError] = useState<string | null>(null)
   const [showServerCode, setShowServerCode] = useState(false)
   const [copiedCode, setCopiedCode] = useState(false)
@@ -306,9 +313,13 @@ export default function AddPluginModal({ onAdd, onClose }: Props) {
           {/* Header */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-100 shrink-0">
             <div>
-              <h2 className="text-sm font-semibold text-zinc-900">Add Custom Plugin</h2>
+              <h2 className="text-sm font-semibold text-zinc-900">
+                {isEditMode ? `Edit Plugin — ${initialManifest?.name}` : 'Add Custom Plugin'}
+              </h2>
               <p className="text-xs text-zinc-400 mt-0.5">
-                Define a plugin via JSON manifest. Your server handles execution.
+                {isEditMode
+                  ? 'Edit the JSON manifest and save to update the plugin.'
+                  : 'Define a plugin via JSON manifest. Your server handles execution.'}
               </p>
             </div>
             <button
@@ -322,27 +333,29 @@ export default function AddPluginModal({ onAdd, onClose }: Props) {
           {/* Scrollable body */}
           <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
 
-            {/* Template picker */}
-            <div>
-              <div className="text-[10px] text-zinc-400 uppercase tracking-widest font-medium mb-2">Template</div>
-              <div className="grid grid-cols-3 gap-2">
-                {TEMPLATES.map((t) => (
-                  <button
-                    key={t.key}
-                    onClick={() => selectTemplate(t.key)}
-                    className={`flex flex-col items-start gap-1 px-3 py-3 rounded-xl border text-left transition-[background-color,border-color,box-shadow] duration-150 active:scale-[0.98] ${
-                      selectedTemplate === t.key
-                        ? 'border-blue-300 bg-blue-50 shadow-[0_0_0_3px_rgba(59,130,246,0.10)]'
-                        : 'border-zinc-200 hover:border-zinc-300 hover:bg-zinc-50'
-                    }`}
-                  >
-                    <span className="text-xl leading-none">{t.icon}</span>
-                    <span className={`text-xs font-semibold ${selectedTemplate === t.key ? 'text-blue-700' : 'text-zinc-700'}`}>{t.label}</span>
-                    <span className="text-[10px] text-zinc-400 leading-snug">{t.tagline}</span>
-                  </button>
-                ))}
+            {/* Template picker — hidden in edit mode */}
+            {!isEditMode && (
+              <div>
+                <div className="text-[10px] text-zinc-400 uppercase tracking-widest font-medium mb-2">Template</div>
+                <div className="grid grid-cols-3 gap-2">
+                  {TEMPLATES.map((t) => (
+                    <button
+                      key={t.key}
+                      onClick={() => selectTemplate(t.key)}
+                      className={`flex flex-col items-start gap-1 px-3 py-3 rounded-xl border text-left transition-[background-color,border-color,box-shadow] duration-150 active:scale-[0.98] ${
+                        selectedTemplate === t.key
+                          ? 'border-blue-300 bg-blue-50 shadow-[0_0_0_3px_rgba(59,130,246,0.10)]'
+                          : 'border-zinc-200 hover:border-zinc-300 hover:bg-zinc-50'
+                      }`}
+                    >
+                      <span className="text-xl leading-none">{t.icon}</span>
+                      <span className={`text-xs font-semibold ${selectedTemplate === t.key ? 'text-blue-700' : 'text-zinc-700'}`}>{t.label}</span>
+                      <span className="text-[10px] text-zinc-400 leading-snug">{t.tagline}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
 
             {/* JSON editor */}
             <div>
@@ -457,7 +470,7 @@ export default function AddPluginModal({ onAdd, onClose }: Props) {
               onClick={handleAdd}
               className="px-4 py-2 bg-blue-600 hover:bg-blue-500 active:scale-[0.97] text-white text-xs font-semibold rounded-lg shadow-sm shadow-blue-200 transition-[transform,background-color] duration-150"
             >
-              Add Plugin →
+              {isEditMode ? 'Save Changes →' : 'Add Plugin →'}
             </button>
           </div>
         </div>

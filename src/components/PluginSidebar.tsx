@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { getPluginList, registerPluginFromManifest, removeCustomPlugin, loadSavedManifests, type PluginManifest } from '../plugins/registry.ts'
+import { getPluginList, registerPluginFromManifest, removeCustomPlugin, loadSavedManifests, type PluginManifest, type Plugin } from '../plugins/registry.ts'
 import AddPluginModal from './AddPluginModal.tsx'
 
 interface Props {
@@ -33,17 +33,34 @@ const EXAMPLE_PROMPTS: Record<string, string[]> = {
 export default function PluginSidebar({ onPrompt, onAddBlock }: Props) {
   const [expanded, setExpanded] = useState<string | null>(null)
   const [showAddModal, setShowAddModal] = useState(false)
+  const [editingManifest, setEditingManifest] = useState<PluginManifest | null>(null)
   // Increment to force re-render after registration/removal
   const [pluginVersion, setPluginVersion] = useState(0)
 
   const plugins = getPluginList()
-  const customIds = new Set(loadSavedManifests().map((m) => m.id))
+
+  const savedManifests = loadSavedManifests()
+  const customManifestMap = new Map(savedManifests.map((m) => [m.id, m]))
 
   const handleAdd = (manifest: PluginManifest) => {
     registerPluginFromManifest(manifest)
     setPluginVersion((v) => v + 1)
     setShowAddModal(false)
-    setExpanded(manifest.id) // auto-expand the new plugin
+    setEditingManifest(null)
+    setExpanded(manifest.id)
+  }
+
+  const handleEdit = (plugin: Plugin, e: React.MouseEvent) => {
+    e.stopPropagation()
+    const manifest = customManifestMap.get(plugin.id)
+    if (manifest) {
+      setEditingManifest(manifest)
+    }
+  }
+
+  const closeModal = () => {
+    setShowAddModal(false)
+    setEditingManifest(null)
   }
 
   const handleRemove = (id: string, e: React.MouseEvent) => {
@@ -80,7 +97,7 @@ export default function PluginSidebar({ onPrompt, onAddBlock }: Props) {
             {plugins.map((plugin) => {
               const isOpen = expanded === plugin.id
               const examples = EXAMPLE_PROMPTS[plugin.id] ?? []
-              const isCustom = customIds.has(plugin.id)
+              const isCustom = customManifestMap.has(plugin.id)
               return (
                 <div key={plugin.id}>
                   <button
@@ -154,14 +171,23 @@ export default function PluginSidebar({ onPrompt, onAddBlock }: Props) {
                           </div>
                         )}
 
-                        {/* Remove custom plugin */}
+                        {/* Edit / Remove for custom plugins */}
                         {isCustom && (
-                          <button
-                            onClick={(e) => handleRemove(plugin.id, e)}
-                            className="text-[9px] text-red-400 hover:text-red-600 transition-colors duration-100 mt-0.5"
-                          >
-                            Remove plugin
-                          </button>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <button
+                              onClick={(e) => handleEdit(plugin, e)}
+                              className="text-[9px] text-blue-500 hover:text-blue-700 transition-colors duration-100"
+                            >
+                              Edit manifest
+                            </button>
+                            <span className="text-zinc-200 text-[9px]">·</span>
+                            <button
+                              onClick={(e) => handleRemove(plugin.id, e)}
+                              className="text-[9px] text-red-400 hover:text-red-600 transition-colors duration-100"
+                            >
+                              Remove
+                            </button>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -210,11 +236,12 @@ export default function PluginSidebar({ onPrompt, onAddBlock }: Props) {
         </div>
       </div>
 
-      {/* Add Plugin Modal */}
-      {showAddModal && (
+      {/* Add / Edit Plugin Modal */}
+      {(showAddModal || editingManifest) && (
         <AddPluginModal
           onAdd={handleAdd}
-          onClose={() => setShowAddModal(false)}
+          onClose={closeModal}
+          initialManifest={editingManifest ?? undefined}
         />
       )}
     </>

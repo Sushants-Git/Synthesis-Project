@@ -21,6 +21,7 @@ interface StepState {
 interface Props {
   flow: FlowSpec
   onClose: () => void
+  onModify?: () => void
 }
 
 const STATUS_ICON: Record<StepStatus, string> = {
@@ -70,7 +71,7 @@ function buildUpstreamOutputMap(flow: FlowSpec): Map<string, Set<string>> {
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-export default function FlowExecutor({ flow, onClose }: Props) {
+export default function FlowExecutor({ flow, onClose, onModify }: Props) {
   const [walletAddress, setWalletAddress] = useState<string | null>(null)
   const [steps, setSteps] = useState<StepState[]>(
     flow.nodes.map((node) => ({ node, status: 'pending', inputs: {} })),
@@ -178,12 +179,22 @@ export default function FlowExecutor({ flow, onClose }: Props) {
             <h2 className="text-sm font-semibold text-zinc-900 leading-tight">{flow.title}</h2>
             <p className="text-xs text-zinc-400 mt-0.5 leading-snug">{flow.description}</p>
           </div>
-          <button
-            onClick={onClose}
-            className="text-zinc-400 hover:text-zinc-600 text-sm leading-none mt-0.5 shrink-0 transition-colors duration-100 active:scale-[0.9]"
-          >
-            ✕
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            {onModify && (
+              <button
+                onClick={onModify}
+                className="px-2.5 py-1 text-[10px] font-medium text-zinc-500 hover:text-zinc-900 bg-zinc-100 hover:bg-zinc-200 border border-zinc-200 rounded-md transition-[background-color,color] duration-100 active:scale-[0.96]"
+              >
+                Modify
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className="text-zinc-400 hover:text-zinc-600 text-sm leading-none transition-colors duration-100 active:scale-[0.9]"
+            >
+              ✕
+            </button>
+          </div>
         </div>
         {/* Plugin tags */}
         <div className="flex gap-1.5 mt-2.5 flex-wrap">

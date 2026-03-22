@@ -53,6 +53,7 @@ export default function FlowCanvas() {
   const [loading, setLoading] = useState(false)
   const [frameButtons, setFrameButtons] = useState<FrameButtonPos[]>([])
   const [executingFlow, setExecutingFlow] = useState<FlowSpec | null>(null)
+  const [executingFrameId, setExecutingFrameId] = useState<TLShapeId | null>(null)
   /** Conversation history for the current floating prompt session */
   const [conversation, setConversation] = useState<ConversationMessage[]>([])
   /** Whether tldraw's StylePanel (colors/styles toolbar) is visible */
@@ -200,9 +201,18 @@ export default function FlowCanvas() {
     const flow = flowSpecMap.get(btn.frameId)
     if (flow) {
       setExecutingFlow(flow)
-      setShowStylePanel(false) // hide tldraw panel so it doesn't cover the executor ✕
+      setExecutingFrameId(btn.frameId)
+      setShowStylePanel(false)
     }
   }, [])
+
+  const handleModifyExecuting = useCallback(() => {
+    const frameId = executingFrameId
+    setExecutingFlow(null)
+    setExecutingFrameId(null)
+    setShowStylePanel(true)
+    if (frameId) openModify({ frameId, screenX: 0, screenY: 0 })
+  }, [executingFrameId, openModify])
 
   const handleAddBlock = useCallback((pluginId: string, action: string) => {
     const editor = editorRef.current
@@ -323,8 +333,10 @@ export default function FlowCanvas() {
             flow={executingFlow}
             onClose={() => {
               setExecutingFlow(null)
+              setExecutingFrameId(null)
               setShowStylePanel(true)
             }}
+            onModify={handleModifyExecuting}
           />
         )}
 
