@@ -64,7 +64,8 @@ export function deleteSoftPlugin(id: string): void {
 // ── Path resolution ───────────────────────────────────────────────────────────
 
 export function getValueAtPath(obj: unknown, path: string): unknown {
-  const parts = path.split('.')
+  // Filter empty segments so leading-dot paths like ".0.uuid" still resolve correctly
+  const parts = path.split('.').filter(Boolean)
   let cur = obj
   for (const part of parts) {
     if (cur === null || cur === undefined) return undefined

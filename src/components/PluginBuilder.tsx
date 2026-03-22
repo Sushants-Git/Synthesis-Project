@@ -37,7 +37,7 @@ function JsonNode({
             {value.slice(0, 30).map((item, i) => (
               <div key={i} className="flex items-start gap-1 py-[1px]">
                 <span className="text-zinc-400 text-[10px] font-mono shrink-0 mt-[1px]">[{i}]</span>
-                <JsonNode value={item} path={`${path}.${i}`} depth={depth + 1} onMap={onMap} />
+                <JsonNode value={item} path={path ? `${path}.${i}` : String(i)} depth={depth + 1} onMap={onMap} />
               </div>
             ))}
             {value.length > 30 && (
