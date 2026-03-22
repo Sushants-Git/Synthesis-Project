@@ -1,17 +1,14 @@
 import type { Plugin, ExecutionContext, PluginResult } from './types.ts'
 
-const BEARER = import.meta.env.VITE_TWITTER_BEARER_TOKEN as string | undefined
-
-/** GET /api/twitter/<path>?<params> via Vite proxy → api.twitter.com */
+/** GET /api/twitter/<path>?<params>
+ *  Routes through Vite dev proxy → api.twitter.com.
+ *  Authorization header is injected server-side in vite.config.ts.
+ */
 async function twitterGet(path: string, params: Record<string, string>): Promise<unknown> {
-  if (!BEARER) throw new Error('VITE_TWITTER_BEARER_TOKEN not set in .env')
-
   const url = new URL('/api/twitter' + path, window.location.origin)
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v)
 
-  const resp = await fetch(url.toString(), {
-    headers: { Authorization: `Bearer ${BEARER}` },
-  })
+  const resp = await fetch(url.toString())
 
   const text = await resp.text()
   let json: unknown
