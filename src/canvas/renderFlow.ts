@@ -72,7 +72,7 @@ export function renderFlowIntoFrame(
         text: node.label,
         fill: 'solid',
         color: nodeColor(node.type),
-        size: 'xs',
+        size: 's',
         font: 'sans',
         align: 'middle',
         verticalAlign: 'middle',
@@ -101,7 +101,7 @@ export function renderFlowIntoFrame(
         start: { x: 0, y: 0 },
         end: { x: ex - sx, y: ey - sy },
         color: 'grey',
-        size: 'xs',
+        size: 's',
         text: edge.label ?? '',
       },
     })
