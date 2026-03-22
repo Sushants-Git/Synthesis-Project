@@ -106,8 +106,9 @@ export default function FloatingPrompt({
   const hasThread = messages.length > 0
   const WIDTH = 380
 
-  const left = Math.min(screenX - WIDTH / 2, window.innerWidth - WIDTH - 16)
+  const left = Math.min(Math.max(screenX - WIDTH / 2, 16), window.innerWidth - WIDTH - 16)
   const top = Math.max(screenY - 80, 16)
+  const maxHeight = window.innerHeight - top - 16
 
   return (
     <>
@@ -120,9 +121,9 @@ export default function FloatingPrompt({
 
       <div
         className="floating-prompt fixed z-50 flex flex-col gap-2 animate-float-in"
-        style={{ left, top, width: WIDTH }}
+        style={{ left, top, width: WIDTH, maxHeight }}
       >
-        <div className="bg-white border border-zinc-200 rounded-2xl shadow-xl shadow-zinc-200/60 overflow-hidden">
+        <div className="bg-white border border-zinc-200 rounded-2xl shadow-xl shadow-zinc-200/60 overflow-hidden flex flex-col min-h-0">
           {/* Header */}
           <div className="flex items-center gap-2 px-3 pt-3 pb-2">
             <span className="text-xs font-medium text-zinc-500 uppercase tracking-wider">
@@ -141,7 +142,7 @@ export default function FloatingPrompt({
           {hasThread && (
             <div
               ref={threadRef}
-              className="max-h-52 overflow-y-auto px-3 pb-2 space-y-2"
+              className="flex-1 overflow-y-auto px-3 pb-2 space-y-2 min-h-0"
             >
               {messages.map((m, i) => (
                 <MessageBubble key={i} m={m} />
@@ -161,7 +162,7 @@ export default function FloatingPrompt({
           {hasThread && <div className="border-t border-zinc-100 mx-3" />}
 
           {/* Input area */}
-          <div className="px-3 pt-2 pb-3">
+          <div className="px-3 pt-2 pb-3 shrink-0">
             <textarea
               ref={inputRef}
               className={`w-full bg-zinc-50 border rounded-lg px-3 py-2 text-sm text-zinc-900 placeholder-zinc-400 outline-none resize-none transition-[border-color,box-shadow] duration-150 ${
