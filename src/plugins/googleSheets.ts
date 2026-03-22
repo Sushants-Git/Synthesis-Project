@@ -5,11 +5,12 @@ export const GoogleSheetsPlugin: Plugin = {
   name: 'Google Sheets',
   description: 'Read rows from a public Google Sheet — no API key required',
   aiDescription:
-    'Google Sheets. fetch_rows(sheet_url*, column_name*) → rows[], table(JSON), count. ' +
-    'rows is a string[] of values from the specified column. ' +
-    'Sheet must be shared as "Anyone with the link can view". ' +
-    'Wire: sheets→ens:resolve_batch needs wire {"rows":"names"}. ' +
-    'Wire: sheets→metamask:batch_send needs wire {"rows":"recipients"}.',
+    'Google Sheets — read one column at a time from a public spreadsheet. ' +
+    'fetch_rows(sheet_url, column_name) → rows[] (string array of that column\'s values), table (full JSON), count. ' +
+    'column_name must match the sheet header exactly (case-insensitive). ' +
+    'To use two columns from the same sheet (e.g. handles + ens_names), add TWO fetch_rows nodes with the same URL but different column_name values. ' +
+    'Sheet must be shared as "Anyone with the link can view" (no API key needed). ' +
+    'rows[] output: wire to ens:resolve_batch with {"rows":"names"}, to batch_send with {"rows":"recipients"}, to chatgpt with {"rows":"items"}, to get_profiles with {"rows":"handles"}.',
   icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="#000000" d="M7 19h10v-7H7Zm5.75-4.25V13.5h2.75v1.25Zm0 2.75v-1.25h2.75v1.25ZM8.5 14.75V13.5h2.75v1.25Zm0 2.75v-1.25h2.75v1.25ZM6 22q-.825 0-1.412-.587Q4 20.825 4 20V4q0-.825.588-1.413Q5.175 2 6 2h8l6 6v12q0 .825-.587 1.413Q18.825 22 18 22Zm7-13h5l-5-5Z"/></svg>',
   color: 'green',
   capabilities: [

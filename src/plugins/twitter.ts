@@ -21,13 +21,12 @@ export const TwitterPlugin: Plugin = {
   name: 'Twitter / X',
   description: 'Search Twitter/X for users by topic, look up handles, fetch batch profiles',
   aiDescription:
-    'Twitter/X plugin. ' +
-    'search_users(query*) → handles[], top_handle — find users by topic, returns sorted handles. ' +
-    'get_profiles(handles[]*) → profiles[], summary — batch profile lookup for a list of handles; returns formatted profile strings. ' +
-    'verify_handle(handle*) → handle, name, followers, bio — look up a specific handle. ' +
-    'user_approval() — shows upstream handles and waits for user to pick. ' +
-    'Wire: search_users→verify_handle needs wire {"top_handle":"handle"}. ' +
-    'Wire: search_users→get_profiles needs wire {"handles":"handles"}.',
+    'Twitter/X plugin. THREE DISTINCT ACTIONS — choose carefully: ' +
+    'search_users: discovers users by topic query. Use when targets are unknown ("find ZK builders"). Outputs handles[] (all found) and top_handle (single best). ' +
+    'get_profiles: fetches profile info for KNOWN handles. Use when user specifies handles directly. Input: comma-sep handles in params OR handles[] from upstream. Outputs profiles[] (bio/followers strings for GPT) AND handles[] (pass-through for filtering). ' +
+    'verify_handle: looks up a single handle. Use only when you need detailed info on one person. ' +
+    'CRITICAL: Twitter handles (@user) are NOT ENS names. Never append .eth to a handle. ' +
+    'FILTER PATTERN: get_profiles → chatgpt (true/false per profile) → util:filter. Wire profiles→chatgpt:items, chatgpt:results→filter:conditions, get_profiles:handles→filter:items.',
   icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 432 384"><path fill="#000000" d="M383 105v11q0 45-16.5 88.5t-47 79.5t-79 58.5T134 365q-73 0-134-39q10 1 21 1q61 0 109-37q-29-1-51.5-18T48 229q8 2 16 2q12 0 23-4q-30-6-50-30t-20-55v-1q19 10 40 11q-39-27-39-73q0-24 12-44q33 40 79.5 64T210 126q-2-10-2-20q0-36 25.5-61.5T295 19q38 0 64 27q30-6 56-21q-10 31-39 48q27-3 51-13q-18 26-44 45z"/></svg>',
   color: 'light-blue',
   category: 'hard',

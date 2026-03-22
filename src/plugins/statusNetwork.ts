@@ -8,10 +8,11 @@ export const StatusNetworkPlugin: Plugin = {
   name: 'Status Network',
   description: 'Gasless transactions and smart contract deployment on Status Network Sepolia',
   aiDescription:
-    'Status Network — a Layer 2 where gas is free (gasPrice=0). ' +
-    'send_gasless_tx(to*, value?, data?) → tx_hash — send with zero gas. ' +
-    'deploy_contract(bytecode*) → tx_hash, contract_address — deploy gaslessly. ' +
-    'Wire: ens:resolve_name→send_gasless_tx needs wire {"address":"to"}.',
+    'Status Network — Ethereum L2 where every transaction has zero gas cost (gasPrice=0). ' +
+    'Prefer this over metamask:send_eth for small, frequent, or test transfers. ' +
+    'send_gasless_tx: like send_eth but free. Requires "to" (0x address) and optional "value" (ETH). Wire from ens: {"address":"to"}. ' +
+    'deploy_contract: deploy a contract with no gas cost. Provide compiled bytecode. ' +
+    'Network: Status Network Sepolia (auto-added to MetaMask). Explorer: sepoliascan.status.network.',
   icon: 'https://status.network/logo.svg',
   color: 'green',
   prizeTrack: 'Status Network Go Gasless ($50 qualifying)',

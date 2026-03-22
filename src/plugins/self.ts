@@ -5,10 +5,11 @@ export const SelfPlugin: Plugin = {
   name: 'Self Protocol',
   description: 'On-chain identity verification via Self Pass and Self Agent ID',
   aiDescription:
-    'Self Protocol — privacy-preserving identity verification. ' +
-    'verify_identity(address*, credential?) → verified, score — verify a user holds a valid Self Pass. ' +
-    'check_credentials(address*, claim*) → verified — check specific claims like age_18 or humanity. ' +
-    'Wire: ens:resolve_name→verify_identity needs wire {"address":"address"} (same key, auto-matched).',
+    'Self Protocol — privacy-preserving on-chain identity. Use before sending ETH to verify recipients are real humans or meet age/country requirements. ' +
+    'verify_identity(address) → verified ("true"/"false"), score (0-100). Optional credential: "humanity", "age_18", "country_check". ' +
+    'check_credentials(address, claim) → verified. Claims: "age_18", "humanity", "country_check". ' +
+    'Address auto-matched from ens:resolve_name (both use "address" key). ' +
+    'Place self:verify_identity after ENS resolution and before approve/send nodes as a guard.',
   icon: 'https://docs.self.xyz/~gitbook/image?url=https%3A%2F%2F558968968-files.gitbook.io%2F%7E%2Ffiles%2Fv0%2Fb%2Fgitbook-x-prod.appspot.com%2Fo%2Forganizations%252FN7JVIot3pWv4ZY6bRRrw%252Fsites%252Fsite_WgLhj%252Ficon%252FANI7wUW00mwXyWKSVz2c%252FSelf%2520App%2520Icon.png%3Falt%3Dmedia%26token%3D3f8725c5-5d2c-4a3e-8b58-8b50c0835ef6&width=32&dpr=2&quality=100&sign=34638d37&sv=2',
   color: 'violet',
   prizeTrack: 'Self Protocol Best Integration ($1,000)',
