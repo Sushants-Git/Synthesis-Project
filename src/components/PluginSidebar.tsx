@@ -1,8 +1,10 @@
 import { useState } from 'react'
-import { PLUGIN_LIST } from '../plugins/registry.ts'
+import { getPluginList } from '../plugins/registry.ts'
 
 interface Props {
   onPrompt: (prompt: string) => void
+  /** Called when the user clicks "+" on a capability — places a block on canvas */
+  onAddBlock: (pluginId: string, action: string) => void
 }
 
 const EXAMPLE_PROMPTS: Record<string, string[]> = {
@@ -28,8 +30,9 @@ const EXAMPLE_PROMPTS: Record<string, string[]> = {
   ],
 }
 
-export default function PluginSidebar({ onPrompt }: Props) {
+export default function PluginSidebar({ onPrompt, onAddBlock }: Props) {
   const [expanded, setExpanded] = useState<string | null>(null)
+  const plugins = getPluginList()
 
   return (
     <div className="fixed left-0 top-0 h-full w-56 z-30 flex flex-col bg-white border-r border-zinc-200 overflow-y-auto">
@@ -50,7 +53,7 @@ export default function PluginSidebar({ onPrompt }: Props) {
       <div className="px-3 pt-3 pb-2">
         <div className="text-[9px] text-zinc-400 uppercase tracking-widest mb-2 px-1 font-medium">Plugins</div>
         <div className="space-y-0.5">
-          {PLUGIN_LIST.map((plugin) => {
+          {plugins.map((plugin) => {
             const isOpen = expanded === plugin.id
             const examples = EXAMPLE_PROMPTS[plugin.id] ?? []
             return (
@@ -93,10 +96,16 @@ export default function PluginSidebar({ onPrompt }: Props) {
                       <div className="space-y-1">
                         <div className="text-[9px] text-zinc-400 uppercase tracking-widest font-medium">Capabilities</div>
                         {plugin.capabilities.map((cap) => (
-                          <div key={cap.action} className="text-[10px] text-zinc-500 flex items-start gap-1">
-                            <span className="text-zinc-300 shrink-0">·</span>
-                            <span>{cap.label}</span>
-                          </div>
+                          <button
+                            key={cap.action}
+                            onClick={() => onAddBlock(plugin.id, cap.action)}
+                            title="Add block to canvas"
+                            className="w-full flex items-start gap-1.5 py-0.5 text-left group/cap rounded hover:bg-zinc-50 transition-colors duration-100 active:scale-[0.97]"
+                          >
+                            <span className="text-zinc-300 shrink-0 mt-[1px] group-hover/cap:text-zinc-400 transition-colors">·</span>
+                            <span className="text-[10px] text-zinc-500 group-hover/cap:text-zinc-700 flex-1 transition-colors">{cap.label}</span>
+                            <span className="text-[9px] text-zinc-300 group-hover/cap:text-blue-400 shrink-0 transition-colors pr-1">+</span>
+                          </button>
                         ))}
                       </div>
 
@@ -137,6 +146,10 @@ export default function PluginSidebar({ onPrompt }: Props) {
           <div className="flex items-center gap-2">
             <kbd className="px-1.5 py-0.5 bg-zinc-100 border border-zinc-200 rounded text-[9px] text-zinc-500 font-mono shrink-0">2×</kbd>
             <span>double-click canvas for quick prompt</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <kbd className="px-1.5 py-0.5 bg-zinc-100 border border-zinc-200 rounded text-[9px] text-zinc-500 font-mono shrink-0">+</kbd>
+            <span>click capability to add block</span>
           </div>
           <div className="flex items-center gap-2">
             <kbd className="px-1.5 py-0.5 bg-zinc-100 border border-zinc-200 rounded text-[9px] text-zinc-500 font-mono shrink-0">⚡</kbd>

@@ -1,4 +1,4 @@
-import { Tldraw, type Editor, type TLShapeId } from '@tldraw/tldraw'
+import { createShapeId, Tldraw, type Editor, type TLShapeId } from '@tldraw/tldraw'
 import '@tldraw/tldraw/tldraw.css'
 import { useCallback, useRef, useState } from 'react'
 import FloatingPrompt from '../components/FloatingPrompt.tsx'
@@ -6,8 +6,9 @@ import FlowExecutor from '../components/FlowExecutor.tsx'
 import PluginSidebar from '../components/PluginSidebar.tsx'
 import { parseIntent, type FlowSpec, type ConversationMessage } from '../ai/flowParser.ts'
 import { renderFlowIntoFrame, renderFlowAtPoint } from './renderFlow.ts'
-import { FlowNodeShapeUtil } from './FlowNodeShape.tsx'
+import { FlowNodeShapeUtil, PLUGIN_CSS_COLORS } from './FlowNodeShape.tsx'
 import { EXAMPLE_FLOW } from './exampleFlow.ts'
+import { getPlugin } from '../plugins/registry.ts'
 
 interface PromptState {
   screenX: number
@@ -202,9 +203,43 @@ export default function FlowCanvas() {
     }
   }, [])
 
+  const handleAddBlock = useCallback((pluginId: string, action: string) => {
+    const editor = editorRef.current
+    if (!editor) return
+    const plugin = getPlugin(pluginId)
+    const cap = plugin?.capabilities.find((c) => c.action === action)
+
+    const vp = editor.getViewportScreenBounds()
+    const cx = SIDEBAR_W + (vp.w - SIDEBAR_W) / 2
+    const cy = vp.h / 2
+    const pagePos = editor.screenToPage({ x: cx, y: cy })
+
+    const accentColor = plugin ? (PLUGIN_CSS_COLORS[plugin.color] ?? '#6b7280') : '#6b7280'
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    editor.createShape<any>({
+      id: createShapeId(),
+      type: 'flow-node',
+      x: pagePos.x - 100,
+      y: pagePos.y - 44,
+      props: {
+        w: 200,
+        h: 88,
+        plugin: pluginId,
+        pluginName: plugin?.name ?? pluginId,
+        action,
+        label: cap?.label ?? action,
+        description: cap?.description ?? '',
+        params: {},
+        icon: plugin?.icon ?? '▸',
+        accentColor,
+      },
+    })
+  }, [])
+
   return (
     <div className="flex w-full h-full">
-      <PluginSidebar onPrompt={handleSidebarPrompt} />
+      <PluginSidebar onPrompt={handleSidebarPrompt} onAddBlock={handleAddBlock} />
 
       <div
         className="relative flex-1 h-full"
