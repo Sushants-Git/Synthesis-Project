@@ -48,6 +48,13 @@ Always include an approval_gate before any action that moves funds or posts exte
 Use ENS names wherever possible instead of hex addresses.
 Return ONLY valid JSON. No markdown, no explanation.`
 
+function extractJSON(text: string): string {
+  // Strip markdown code fences (```json ... ``` or ``` ... ```)
+  const match = text.match(/```(?:json)?\s*([\s\S]*?)```/)
+  if (match?.[1]) return match[1].trim()
+  return text.trim()
+}
+
 export async function parseIntent(prompt: string): Promise<FlowSpec> {
   const response = await chat(
     [{ role: 'user', content: prompt }],
@@ -55,7 +62,7 @@ export async function parseIntent(prompt: string): Promise<FlowSpec> {
   )
 
   try {
-    return JSON.parse(response.content) as FlowSpec
+    return JSON.parse(extractJSON(response.content)) as FlowSpec
   } catch {
     throw new Error(`Failed to parse AI response as FlowSpec: ${response.content}`)
   }
