@@ -195,10 +195,16 @@ export default function FloatingPrompt({
   }
 
   const hasThread = messages.length > 0
-  const WIDTH = 400
+  const WIDTH = 440
 
   const left = Math.min(Math.max(screenX - WIDTH / 2, 16), window.innerWidth - WIDTH - 16)
-  const top = Math.max(screenY - 80, 16)
+  const rawTop = Math.max(screenY - 80, 16)
+  const availableHeight = window.innerHeight - rawTop - 16
+  // In modify mode ensure enough room; shift up if needed
+  const dialogHeight = mode === 'modify' ? Math.min(560, availableHeight) : undefined
+  const top = mode === 'modify' && availableHeight < 480
+    ? Math.max(window.innerHeight - 480 - 16, 16)
+    : rawTop
   const maxHeight = window.innerHeight - top - 16
 
   return (
@@ -210,9 +216,9 @@ export default function FloatingPrompt({
 
       <div
         className="floating-prompt fixed z-50 flex flex-col animate-float-in"
-        style={{ left, top, width: WIDTH, maxHeight }}
+        style={{ left, top, width: WIDTH, maxHeight, height: dialogHeight }}
       >
-        <div className="bg-white border border-zinc-200/80 rounded-2xl shadow-2xl shadow-zinc-900/10 overflow-hidden flex flex-col min-h-0">
+        <div className="bg-white border border-zinc-200/80 rounded-2xl shadow-2xl shadow-zinc-900/10 overflow-hidden flex flex-col" style={{ height: '100%' }}>
 
           {/* Header */}
           <div className="flex items-center gap-2.5 px-4 pt-3.5 pb-3 border-b border-zinc-100 shrink-0">
@@ -261,12 +267,11 @@ export default function FloatingPrompt({
 
           {/* JSON editor — modify mode, json tab */}
           {mode === 'modify' && activeTab === 'json' && (
-            <div className="flex flex-col px-3 py-3 gap-2 min-h-0" style={{ flex: '1 1 0', minHeight: 0 }}>
+            <div className="flex flex-col flex-1 px-3 py-3 gap-2 min-h-0">
               <textarea
                 value={jsonValue}
                 onChange={(e) => { setJsonValue(e.target.value); setJsonError(null) }}
-                className="flex-1 font-mono text-[11px] leading-relaxed text-zinc-800 bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2.5 resize-none outline-none focus:border-zinc-400 focus:bg-white transition-[border-color,background-color] duration-100"
-                style={{ minHeight: 240 }}
+                className="flex-1 font-mono text-[11px] leading-relaxed text-zinc-800 bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2.5 resize-none outline-none focus:border-zinc-400 focus:bg-white transition-[border-color,background-color] duration-100 min-h-0"
                 spellCheck={false}
                 autoCapitalize="off"
                 autoCorrect="off"
