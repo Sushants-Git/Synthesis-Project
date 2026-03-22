@@ -68,6 +68,7 @@ export const TwitterPlugin: Plugin = {
       ],
       outputs: [
         { key: 'profiles', label: 'Profile Strings', type: 'string[]' },
+        { key: 'handles', label: 'Handles (pass-through)', type: 'string[]' },
         { key: 'summary', label: 'Summary', type: 'string' },
       ],
     },
@@ -196,10 +197,14 @@ export const TwitterPlugin: Plugin = {
           return `@${u.username} (${u.name}) | ${followers.toLocaleString()} followers${bio}`
         })
 
+        // Also pass back the handles in order so they can be used in util:filter:items
+        const resolvedHandles = users.map((u) => `@${u.username}`)
+
         return {
           status: 'done',
           outputs: {
             profiles,
+            handles: resolvedHandles,
             summary: `Fetched ${users.length} profiles`,
           },
           display: `Fetched ${users.length} profile${users.length !== 1 ? 's' : ''}`,

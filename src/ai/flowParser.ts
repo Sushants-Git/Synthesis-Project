@@ -84,32 +84,36 @@ DATA FLOW MODEL:
 WIRE REFERENCE (required only when output key ≠ input key):
 - ens:resolve_name → metamask:send_eth: wire {"address":"to"}
 - ens:resolve_name → status:send_gasless_tx: wire {"address":"to"}
-- ens:resolve_name → self:verify_identity: auto-matched (both "address")
 - ens:resolve_batch → metamask:batch_send: wire {"addresses":"recipients"}
 - sheets:fetch_rows → ens:resolve_batch: wire {"rows":"names"}
 - sheets:fetch_rows → metamask:batch_send: wire {"rows":"recipients"}
 - sheets:fetch_rows → chatgpt:process: wire {"rows":"items"}
-- twitter:search_users → twitter:verify_handle: wire {"top_handle":"handle"}
 - twitter:search_users → twitter:get_profiles: AUTO-MATCHED (both key "handles", no wire)
+- twitter:search_users → twitter:verify_handle: wire {"top_handle":"handle"}
 - twitter:get_profiles → chatgpt:process: wire {"profiles":"items"}
-- chatgpt:process → system:output: auto-matched
+- chatgpt:results → util:filter:conditions: wire {"results":"conditions"}
+- util:filter:kept → ens:resolve_batch: wire {"kept":"names"}
+- util:filter:kept → metamask:batch_send: wire {"kept":"recipients"}
 
 RULES:
-1. Put all user-specified values (amounts, addresses, names, URLs) in params.
+1. Hardcode all user-specified values (amounts, addresses, names, URLs) in params.
 2. Always end with system:output.
-3. Place metamask:approve as the FIRST node in any flow that sends ETH, before all data-fetching.
-4. For single ENS name → single send: resolve_name → send_eth, wire {"address":"to"}.
-5. For 2+ ENS names: ALWAYS use resolve_batch (NEVER multiple resolve_name nodes).
-   Specify names in params as a JSON array string: {"names": "[\"a.eth\",\"b.eth\"]"}
-6. For lists: use resolve_batch for ENS, batch_send for sending to multiple.
-7. Prefer status:send_gasless_tx for small/frequent transfers.
-8. Use wire only when the output key and input key differ.
-9. CRITICAL — when the user provides specific handles, addresses, or names in the conversation,
-   hardcode them directly in params. Do NOT add search/discovery nodes (search_users, etc.).
-   Only add discovery nodes when the user says "find", "search", or leaves targets open-ended.
-10. twitter:search_users outputs "handles" (array) and "top_handle" (single best).
-    To pass ALL found handles downstream, use the "handles" output (auto-matched, no wire).
-    To pass only the top one to verify_handle, use wire {"top_handle":"handle"}.
+3. Place metamask:approve as the FIRST node in any flow that sends ETH.
+4. For 2+ ENS names: ALWAYS use resolve_batch. Specify as JSON array: {"names": "[\"a.eth\",\"b.eth\"]"}. NEVER multiple resolve_name nodes.
+5. For lists: resolve_batch for ENS, batch_send for multi-send.
+6. Use wire only when output key ≠ input key.
+7. When user provides specific handles/names/addresses: hardcode in params, skip discovery nodes.
+8. twitter:search_users → get_profiles is AUTO-MATCHED (key "handles" → "handles", NO wire).
+9. NEVER use util:collect on a string[] input — collect only accepts a plain string.
+   If upstream already outputs string[], wire it directly to the next node's string[] input.
+10. TWITTER HANDLES ARE NOT ENS NAMES. "@sushantstwt" ≠ "sushantstwt.eth".
+    If the goal is to send ETH to Twitter users: end the flow at the filter/profile step and
+    show results via system:output. Only use ens:resolve if the user explicitly provides .eth names
+    or if a sheet column contains ENS names.
+11. batch_send: use EITHER amount (per-recipient) OR total_amount (split equally). Never both.
+12. GPT true/false filtering pattern: chatgpt returns results[] with "true"/"false" per item.
+    Wire BOTH: source_handles → util:filter:items AND chatgpt:results → util:filter:conditions.
+    util:filter outputs kept[] (items where condition="true") and rejected[].
 
 @MENTION RULES:
 - @pluginId pins that plugin. @pluginId:action pins plugin + action.
@@ -125,24 +129,29 @@ nodes: n1:metamask:approve, n2:ens:resolve_batch(names:"[\"sushant.eth\",\"veese
 edges: n1→n2, n2→n3 wire{"addresses":"recipients"}, n3→n4
 
 "fetch addresses from Google Sheet, send each 0.01 ETH":
-nodes: n1:metamask:approve, n2:sheets:fetch_rows(sheet_url:"...",column_name:"receiver"), n3:metamask:batch_send(amount:"0.01"), n4:system:output
+nodes: n1:metamask:approve, n2:sheets:fetch_rows(sheet_url:"...",column_name:"address"), n3:metamask:batch_send(amount:"0.01"), n4:system:output
 edges: n1→n2, n2→n3 wire{"rows":"recipients"}, n3→n4
 
-"fetch ENS names from sheet, resolve, send 0.5 ETH split equally":
+"fetch ENS names from sheet, resolve, send 0.5 ETH total split equally":
 nodes: n1:metamask:approve, n2:sheets:fetch_rows(sheet_url:"..."), n3:ens:resolve_batch, n4:metamask:batch_send(total_amount:"0.5"), n5:system:output
 edges: n1→n2, n2→n3 wire{"rows":"names"}, n3→n4 wire{"addresses":"recipients"}, n4→n5
 
-"resolve vitalik.eth then reverse-lookup that address":
+"find ZK builders on Twitter, score with GPT, show results":
+nodes: n1:twitter:search_users(query:"ZK builder",limit:"10"), n2:twitter:get_profiles, n3:chatgpt:process(prompt:"Score each builder out of 10. Return JSON array of scores."), n4:system:output
+edges: n1→n2, n2→n3 wire{"profiles":"items"}, n3→n4
+
+"find ZK builders on Twitter, filter by tech focus, send 0.5 ETH each to their ENS names from a sheet":
+IMPORTANT: Twitter handles ≠ ENS. If sending ETH after Twitter filtering, the sheet must have the ENS column.
+nodes: n1:metamask:approve, n2:sheets:fetch_rows(sheet_url:"...",column_name:"handle"), n3:sheets:fetch_rows(sheet_url:"...",column_name:"ens_name"), n4:twitter:get_profiles, n5:chatgpt:process(prompt:"Is this person a tech builder? Return true or false per person as a JSON array."), n6:util:filter, n7:ens:resolve_batch, n8:metamask:batch_send(amount:"0.5"), n9:system:output
+edges: n2→n4 wire{"rows":"handles"}, n4→n5 wire{"profiles":"items"}, n5→n6 wire{"results":"conditions"}, n3→n6 wire{"rows":"items"}, n6→n7 wire{"kept":"names"}, n7→n8 wire{"addresses":"recipients"}, n8→n9
+
+"check sushantstwt and vee19twt for tech content, show who qualifies (no ETH send — handles are not ENS)":
+nodes: n1:twitter:get_profiles(handles:"sushantstwt,vee19twt"), n2:chatgpt:process(prompt:"Does this person post about tech? Answer true or false per person as a JSON array."), n3:util:filter, n4:system:output
+edges: n1→n2 wire{"profiles":"items"}, n1→n3 wire{"handles":"items"}, n2→n3 wire{"results":"conditions"}, n3→n4 wire{"kept":"result"}
+
+"resolve vitalik.eth then reverse-lookup":
 nodes: n1:ens:resolve_name(name:"vitalik.eth"), n2:ens:lookup_address, n3:system:output
-edges: n1→n2 (auto-matched: both use "address"), n2→n3
-
-"find ZK builders on Twitter and score them with ChatGPT":
-nodes: n1:twitter:search_users(query:"ZK builder",limit:"10"), n2:twitter:get_profiles, n3:chatgpt:process(prompt:"Score each builder out of 10. Return JSON array."), n4:system:output
-edges: n1→n2 (auto-matched: both "handles"), n2→n3 wire{"profiles":"items"}, n3→n4
-
-"send 0.5 ETH each to sushantstwt.eth and veetwt.eth" (user provided specific names):
-nodes: n1:metamask:approve, n2:ens:resolve_batch(names:"[\"sushantstwt.eth\",\"veetwt.eth\"]"), n3:metamask:batch_send(amount:"0.5"), n4:system:output
-edges: n1→n2, n2→n3 wire{"addresses":"recipients"}, n3→n4`
+edges: n1→n2, n2→n3`
 }
 
 function extractJSON(text: string): string {
