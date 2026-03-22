@@ -66,8 +66,10 @@ Sending ETH:
 Reading data:
   → spreadsheet: sheets:fetch_rows (one column per node call)
   → find Twitter users by topic: twitter:search_users
-  → get profiles for known handles: twitter:get_profiles
-  → single Twitter handle: twitter:verify_handle
+  → get profiles for known handles: twitter:get_profiles (bio/followers)
+  → fetch tweets for ONE handle: twitter:get_tweets → tweets[]
+  → fetch tweets for MULTIPLE handles: twitter:get_batch_tweets → tweets[] (each prefixed "@handle: text")
+  → single Twitter handle detail: twitter:verify_handle
 
 Transforming / filtering data:
   → GPT true/false filter: chatgpt:process (prompt returns ["true","false",...]) → util:filter
@@ -91,6 +93,9 @@ Identity / gating:
   twitter:search_users → get_profiles             AUTO-MATCHED (both key "handles")
   twitter:search_users → verify_handle            wire {"top_handle":"handle"}
   twitter:get_profiles → chatgpt:process          wire {"profiles":"items"}
+  twitter:get_profiles → get_batch_tweets         AUTO-MATCHED (both key "handles")
+  twitter:get_batch_tweets → chatgpt:process      wire {"tweets":"items"}
+  twitter:get_tweets → chatgpt:process            wire {"tweets":"items"}
   chatgpt:process → util:filter (conditions)      wire {"results":"conditions"}
   util:filter → ens:resolve_batch                 wire {"kept":"names"}
   util:filter → batch_send                        wire {"kept":"recipients"}
@@ -154,9 +159,17 @@ edges: n1→n2, n2→n3 wire{"rows":"names"}, n3→n4 wire{"addresses":"recipien
 n1:twitter:get_profiles(handles:"sushantstwt,vee19twt") → n2:chatgpt:process(prompt:"Does each person regularly post about tech? Return a JSON array of true or false, one per person.") → n3:util:filter → n4:system:output
 edges: n1→n2 wire{"profiles":"items"}, n1→n3 wire{"handles":"items"}, n2→n3 wire{"results":"conditions"}, n3→n4 wire{"kept":"result"}
 
-"find ZK builders on Twitter, score them with GPT":
-n1:twitter:search_users(query:"ZK builder",limit:"10") → n2:twitter:get_profiles → n3:chatgpt:process(prompt:"Score each builder 1-10 for ZK expertise. Return a JSON array of strings like 'handle: score/10 — reason'.") → n4:system:output
-edges: n1→n2, n2→n3 wire{"profiles":"items"}, n3→n4
+"find ZK builders on Twitter, score them with GPT using their actual tweets":
+n1:twitter:search_users(query:"ZK builder",limit:"10") → n2:twitter:get_batch_tweets(count:"5") → n3:chatgpt:process(prompt:"Each line is '@handle: tweet'. Score each handle 1-10 for ZK expertise based on their tweets. Return a JSON array of strings like 'handle: score/10 — reason'.") → n4:system:output
+edges: n1→n2, n2→n3 wire{"tweets":"items"}, n3→n4
+
+"get last 10 tweets from vitalikbuterin and summarize":
+n1:twitter:get_tweets(handle:"vitalikbuterin",count:"10") → n2:chatgpt:process(prompt:"Summarize the main themes in these tweets in 3 bullet points.") → n3:system:output
+edges: n1→n2 wire{"tweets":"items"}, n2→n3
+
+"check sushantstwt and vee19twt for tech tweets, filter those who qualify":
+n1:twitter:get_profiles(handles:"sushantstwt,vee19twt") → n2:twitter:get_batch_tweets(count:"7") → n3:chatgpt:process(prompt:"Based on these tweets, does each person regularly post about tech? Return a JSON array of true or false, one per handle in order.") → n4:util:filter → n5:system:output
+edges: n1→n2, n2→n3 wire{"tweets":"items"}, n1→n4 wire{"handles":"items"}, n3→n4 wire{"results":"conditions"}, n4→n5 wire{"kept":"result"}
 
 "verify vitalik.eth is human before sending ETH":
 n1:metamask:approve → n2:ens:resolve_name(name:"vitalik.eth") → n3:self:verify_identity(credential:"humanity") → n4:metamask:send_eth(amount:"0.1") → n5:system:output
