@@ -295,7 +295,20 @@ export default function FlowCanvas() {
       : []
     setConversation(seed)
     setPromptState({ screenX: center.x, screenY: center.y, mode: 'modify', frameId: btn.frameId })
+    setShowStylePanel(false)
   }, [])
+
+  const handleApplyJSON = useCallback((flow: FlowSpec) => {
+    const editor = editorRef.current
+    const frameId = promptState?.frameId
+    if (!editor || !frameId) return
+    renderFlowIntoFrame(editor, flow, frameId)
+    flowSpecMap.set(frameId, flow)
+    saveCanvas(editor)
+    setFrameButtons(recomputeFramePositions(editor))
+    setShowStylePanel(true)
+    closePrompt()
+  }, [promptState, closePrompt])
 
   const openExecute = useCallback((btn: FrameButtonPos) => {
     const flow = flowSpecMap.get(btn.frameId)
@@ -453,10 +466,16 @@ export default function FlowCanvas() {
             loading={loading}
             messages={conversation}
             initialValue={pendingAutoPromptRef.current ?? ''}
+            flowJSON={
+              promptState.mode === 'modify' && promptState.frameId
+                ? JSON.stringify(flowSpecMap.get(promptState.frameId) ?? {}, null, 2)
+                : undefined
+            }
             onSubmit={(prompt) => {
               pendingAutoPromptRef.current = null
               void handleSubmit(prompt)
             }}
+            onApplyJSON={handleApplyJSON}
             onClose={() => {
               pendingAutoPromptRef.current = null
               const editor = editorRef.current
@@ -467,6 +486,7 @@ export default function FlowCanvas() {
                   flowFrameIds.delete(promptState.frameId)
                 }
               }
+              setShowStylePanel(true)
               closePrompt()
             }}
           />

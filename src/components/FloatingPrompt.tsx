@@ -3,6 +3,8 @@ import type { ConversationMessage, FlowSpec } from '../ai/flowParser.ts'
 import { getPluginList, type Plugin } from '../plugins/registry.ts'
 import PluginIcon from './PluginIcon.tsx'
 
+type Tab = 'chat' | 'json'
+
 function MessageBubble({ m }: { m: ConversationMessage }) {
   const [expanded, setExpanded] = useState(false)
 
@@ -75,7 +77,11 @@ interface Props {
   loading: boolean
   initialValue?: string
   messages: ConversationMessage[]
+  /** Pre-filled JSON string for the JSON editor (modify mode only) */
+  flowJSON?: string
   onSubmit: (prompt: string) => void
+  /** Called when user applies a manually-edited JSON spec */
+  onApplyJSON?: (flow: FlowSpec) => void
   onClose: () => void
 }
 
@@ -87,14 +93,41 @@ interface MentionState {
 }
 
 export default function FloatingPrompt({
-  screenX, screenY, mode, loading, initialValue = '', messages, onSubmit, onClose,
+  screenX, screenY, mode, loading, initialValue = '', messages, flowJSON, onSubmit, onApplyJSON, onClose,
 }: Props) {
   const [value, setValue] = useState(initialValue)
   const [mention, setMention] = useState<MentionState | null>(null)
+  const [activeTab, setActiveTab] = useState<Tab>(mode === 'modify' ? 'json' : 'chat')
+  const [jsonValue, setJsonValue] = useState(flowJSON ?? '')
+  const [jsonError, setJsonError] = useState<string | null>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const threadRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => { inputRef.current?.focus() }, [])
+  useEffect(() => {
+    if (activeTab === 'chat') inputRef.current?.focus()
+  }, [activeTab])
+
+  useEffect(() => {
+    if (flowJSON) setJsonValue(flowJSON)
+  }, [flowJSON])
+
+  const handleApplyJSON = () => {
+    try {
+      const parsed = JSON.parse(jsonValue) as FlowSpec
+      if (!parsed.nodes || !Array.isArray(parsed.nodes)) {
+        setJsonError('Invalid flow: must have a nodes array')
+        return
+      }
+      if (!parsed.edges || !Array.isArray(parsed.edges)) {
+        setJsonError('Invalid flow: must have an edges array')
+        return
+      }
+      setJsonError(null)
+      onApplyJSON?.(parsed)
+    } catch (e) {
+      setJsonError(`JSON parse error: ${e instanceof Error ? e.message : String(e)}`)
+    }
+  }
 
   useEffect(() => {
     if (threadRef.current) {
@@ -207,8 +240,61 @@ export default function FloatingPrompt({
             </button>
           </div>
 
+          {/* Tab bar — modify mode only */}
+          {mode === 'modify' && (
+            <div className="flex gap-0 px-4 border-b border-zinc-100 shrink-0">
+              {(['json', 'chat'] as Tab[]).map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={`text-[10px] font-semibold py-2 mr-4 border-b-2 -mb-px transition-colors duration-100 ${
+                    activeTab === tab
+                      ? 'text-zinc-900 border-zinc-900'
+                      : 'text-zinc-400 border-transparent hover:text-zinc-600'
+                  }`}
+                >
+                  {tab === 'json' ? 'JSON' : 'Chat'}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* JSON editor — modify mode, json tab */}
+          {mode === 'modify' && activeTab === 'json' && (
+            <div className="flex flex-col px-3 py-3 gap-2 min-h-0" style={{ flex: '1 1 0', minHeight: 0 }}>
+              <textarea
+                value={jsonValue}
+                onChange={(e) => { setJsonValue(e.target.value); setJsonError(null) }}
+                className="flex-1 font-mono text-[11px] leading-relaxed text-zinc-800 bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2.5 resize-none outline-none focus:border-zinc-400 focus:bg-white transition-[border-color,background-color] duration-100"
+                style={{ minHeight: 240 }}
+                spellCheck={false}
+                autoCapitalize="off"
+                autoCorrect="off"
+              />
+              {jsonError && (
+                <div className="text-[10px] text-red-500 px-0.5 -mt-1">{jsonError}</div>
+              )}
+              <div className="flex gap-2 shrink-0">
+                <button
+                  onClick={() => {
+                    try { setJsonValue(JSON.stringify(JSON.parse(jsonValue), null, 2)) } catch { /* ignore */ }
+                  }}
+                  className="px-3 py-1.5 text-[10px] text-zinc-500 hover:text-zinc-700 border border-zinc-200 rounded-lg hover:bg-zinc-50 transition-colors duration-100 shrink-0"
+                >
+                  Format
+                </button>
+                <button
+                  onClick={handleApplyJSON}
+                  className="flex-1 py-1.5 text-[11px] font-semibold bg-zinc-900 text-white rounded-lg hover:bg-zinc-700 transition-[background-color,transform] duration-150 active:scale-[0.98]"
+                >
+                  Regenerate Diagram
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Thread */}
-          {hasThread && (
+          {activeTab === 'chat' && hasThread && (
             <div ref={threadRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-2 min-h-0">
               {messages.map((m, i) => <MessageBubble key={i} m={m} />)}
               {loading && (
@@ -226,8 +312,8 @@ export default function FloatingPrompt({
             </div>
           )}
 
-          {/* Input area */}
-          <div className="px-3 pb-3 pt-2 shrink-0">
+          {/* Input area — chat tab only */}
+          {activeTab === 'chat' && <div className="px-3 pb-3 pt-2 shrink-0">
             {/* @mention picker */}
             {mention && mention.results.length > 0 && (
               <div className="mb-2 bg-white border border-zinc-200 rounded-xl shadow-lg overflow-hidden">
@@ -306,7 +392,7 @@ export default function FloatingPrompt({
                 <span className="text-[9px] text-zinc-400">Esc Cancel</span>
               </div>
             )}
-          </div>
+          </div>}
         </div>
       </div>
     </>
