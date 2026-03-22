@@ -1,4 +1,4 @@
-import { createShapeId, type Editor, type TLShapeId } from '@tldraw/tldraw'
+import { createShapeId, toRichText, type Editor, type TLShapeId } from '@tldraw/tldraw'
 import type { FlowSpec, NodeType } from '../ai/flowParser.ts'
 
 const NODE_W = 180
@@ -69,7 +69,7 @@ export function renderFlowIntoFrame(
         geo: isDiamond ? 'diamond' : 'rectangle',
         w: NODE_W,
         h: isDiamond ? NODE_H * 1.25 : NODE_H,
-        text: node.label,
+        richText: toRichText(node.label),
         fill: 'solid',
         color: nodeColor(node.type),
         size: 's',
