@@ -62,7 +62,7 @@ function collectTemplateVars(flow: FlowSpec): string[] {
     }
   }
   for (const node of flow.nodes) {
-    for (const val of Object.values(node.params ?? {})) push(val)
+    for (const val of Object.values(node.params ?? {})) if (typeof val === 'string') push(val)
     const url = getPlugin(node.plugin)?.executeUrl
     if (url) push(url)
   }
