@@ -1,5 +1,5 @@
 import { Tldraw, createShapeId, type Editor } from '@tldraw/tldraw'
-import '@tldraw/tldraw/tldraw.css' assert { type: 'css' }
+import '@tldraw/tldraw/tldraw.css'
 import { useCallback, useRef } from 'react'
 import type { FlowSpec } from '../ai/flowParser.ts'
 
