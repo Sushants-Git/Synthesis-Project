@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import type { FlowSpec, FlowNode } from '../ai/flowParser.ts'
 import type { PluginResult, ExecutionContext } from '../plugins/types.ts'
-import { getPlugin, substituteVars } from '../plugins/registry.ts'
+import { getPlugin, substituteVars, loadVarDefaults } from '../plugins/registry.ts'
 import {
   connectWallet,
   getConnectedAccount,
@@ -105,9 +105,10 @@ export default function FlowExecutor({ flow, onClose, onModify }: Props) {
 
   const upstreamMap = useMemo(() => buildUpstreamOutputMap(flow), [flow])
   const templateVarNames = useMemo(() => collectTemplateVars(flow), [flow])
-  const [templateVarValues, setTemplateVarValues] = useState<Record<string, string>>(() =>
-    Object.fromEntries(templateVarNames.map((k) => [k, ''])),
-  )
+  const [templateVarValues, setTemplateVarValues] = useState<Record<string, string>>(() => {
+    const defaults = loadVarDefaults()
+    return Object.fromEntries(templateVarNames.map((k) => [k, defaults[k] ?? '']))
+  })
 
   useEffect(() => {
     getConnectedAccount().then(setWalletAddress)

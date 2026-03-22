@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import type { PluginManifest } from '../plugins/registry.ts'
+import { useState, useEffect, useMemo } from 'react'
+import { saveVarDefaults, loadVarDefaults, type PluginManifest } from '../plugins/registry.ts'
 
 interface Props {
   onAdd: (manifest: PluginManifest) => void
@@ -247,6 +247,19 @@ export default function AddPluginModal({ onAdd, onClose, initialManifest }: Prop
   const [showServerCode, setShowServerCode] = useState(false)
   const [copiedCode, setCopiedCode] = useState(false)
 
+  // Live-detect {{variable}} placeholders in the JSON
+  const detectedVars = useMemo(() => {
+    const seen = new Set<string>()
+    const order: string[] = []
+    for (const [, key] of jsonValue.matchAll(/\{\{(\w+)\}\}/g)) {
+      if (!seen.has(key)) { seen.add(key); order.push(key) }
+    }
+    return order
+  }, [jsonValue])
+
+  // Variable values — pre-filled from stored defaults
+  const [varValues, setVarValues] = useState<Record<string, string>>(() => loadVarDefaults())
+
   // Close on Escape
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
@@ -274,6 +287,11 @@ export default function AddPluginModal({ onAdd, onClose, initialManifest }: Prop
       setValidationError(result.error)
       return
     }
+    // Persist any filled var values so the executor can pre-fill them
+    const nonEmpty = Object.fromEntries(
+      Object.entries(varValues).filter(([, v]) => v.trim()),
+    )
+    if (Object.keys(nonEmpty).length > 0) saveVarDefaults(nonEmpty)
     onAdd(result.manifest)
   }
 
@@ -354,6 +372,36 @@ export default function AddPluginModal({ onAdd, onClose, initialManifest }: Prop
                     </button>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {/* Live template variable fields */}
+            {detectedVars.length > 0 && (
+              <div className="border border-amber-200 bg-amber-50/60 rounded-xl px-4 py-3 space-y-2 animate-fade-up">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-semibold text-amber-700 uppercase tracking-widest">Template variables</span>
+                  <span className="text-[9px] text-amber-500 italic">detected from {'{{...}}'} in your manifest</span>
+                </div>
+                {detectedVars.map((key) => {
+                  const isSensitive = /key|secret|token|password|auth/i.test(key)
+                  return (
+                    <div key={key} className="flex items-center gap-2.5">
+                      <code className="text-[10px] font-mono text-amber-700 bg-amber-100 border border-amber-200 rounded px-1.5 py-0.5 shrink-0 whitespace-nowrap">
+                        {`{{${key}}}`}
+                      </code>
+                      <input
+                        type={isSensitive ? 'password' : 'text'}
+                        placeholder={`Enter value for ${key}`}
+                        value={varValues[key] ?? ''}
+                        onChange={(e) => setVarValues((prev) => ({ ...prev, [key]: e.target.value }))}
+                        className="flex-1 bg-white border border-amber-200 rounded-lg px-2.5 py-1.5 text-xs font-mono text-zinc-900 placeholder-zinc-400 outline-none focus:border-amber-400 focus:shadow-[0_0_0_3px_rgba(245,158,11,0.10)] transition-[border-color,box-shadow] duration-150"
+                      />
+                    </div>
+                  )
+                })}
+                <p className="text-[9px] text-amber-500 leading-snug pt-0.5">
+                  Saved as defaults — pre-filled every time this plugin runs in the executor.
+                </p>
               </div>
             )}
 

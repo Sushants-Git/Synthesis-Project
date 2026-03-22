@@ -132,6 +132,23 @@ export function createPlugin(
   }
 }
 
+const VAR_DEFAULTS_KEY = 'flowtx_var_defaults'
+
+/** Persist template variable values so the modal and executor can pre-fill them. */
+export function saveVarDefaults(vars: Record<string, string>): void {
+  const current = loadVarDefaults()
+  localStorage.setItem(VAR_DEFAULTS_KEY, JSON.stringify({ ...current, ...vars }))
+}
+
+/** Load stored template variable defaults (merged across all plugins). */
+export function loadVarDefaults(): Record<string, string> {
+  try {
+    return JSON.parse(localStorage.getItem(VAR_DEFAULTS_KEY) ?? '{}') as Record<string, string>
+  } catch {
+    return {}
+  }
+}
+
 /**
  * Replace all {{variable}} placeholders in a string with values from the map.
  * Unmatched placeholders are left as-is so missing vars are obvious.
