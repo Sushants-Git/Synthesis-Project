@@ -1,24 +1,40 @@
 import { createShapeId, type Editor, type TLShapeId } from '@tldraw/tldraw'
 import type { FlowSpec, FlowNode } from '../ai/flowParser.ts'
 import { getPlugin } from '../plugins/registry.ts'
-import { PLUGIN_CSS_COLORS } from './FlowNodeShape.tsx'
+import { PLUGIN_CSS_COLORS, computeNodeHeight } from './FlowNodeShape.tsx'
 
-const NODE_W = 200
+const NODE_W = 220
 const H_GAP = 80
 const V_PADDING = 28
 const H_PADDING = 32
-
-/** Height of a node card depending on how many params it has */
-function nodeHeight(node: FlowNode): number {
-  const paramCount = Object.values(node.params ?? {}).filter(Boolean).length
-  const base = 82
-  return paramCount > 0 ? base + Math.min(paramCount, 3) * 18 : base
-}
 
 function resolveAccentColor(node: FlowNode): string {
   const plugin = getPlugin(node.plugin)
   if (!plugin) return PLUGIN_CSS_COLORS['grey']!
   return PLUGIN_CSS_COLORS[plugin.color] ?? '#6b7280'
+}
+
+/**
+ * Pick the best label for an arrow edge.
+ * Uses the first output key of the from-node that the to-node actually needs.
+ * Falls back to the first output key, then to edge.label.
+ */
+function edgeLabel(flow: FlowSpec, fromId: string, toId: string, fallback: string): string {
+  const fromNode = flow.nodes.find((n) => n.id === fromId)
+  const toNode = flow.nodes.find((n) => n.id === toId)
+
+  const fromCap = fromNode ? getPlugin(fromNode.plugin)?.capabilities.find((c) => c.action === fromNode.action) : null
+  const toCap = toNode ? getPlugin(toNode.plugin)?.capabilities.find((c) => c.action === toNode.action) : null
+
+  const fromOutputs = fromCap?.outputs ?? []
+  const toInputKeys = new Set([
+    ...(toCap?.params.map((p) => p.key) ?? []),
+    ...(toNode?.requiredInputs?.map((r) => r.key) ?? []),
+  ])
+
+  // Prefer a key that is both an output of `from` and an input of `to`
+  const matched = fromOutputs.find((k) => toInputKeys.has(k))
+  return matched ?? fromOutputs[0] ?? fallback
 }
 
 export function renderFlowIntoFrame(editor: Editor, flow: FlowSpec, frameId: TLShapeId) {
@@ -30,7 +46,8 @@ export function renderFlowIntoFrame(editor: Editor, flow: FlowSpec, frameId: TLS
   if (children.length > 0) editor.deleteShapes(children)
 
   const nodeCount = flow.nodes.length
-  const maxH = Math.max(...flow.nodes.map(nodeHeight))
+  const heights = flow.nodes.map((n) => computeNodeHeight(n.plugin, n.action))
+  const maxH = Math.max(...heights)
   const totalW = nodeCount * NODE_W + (nodeCount - 1) * H_GAP + H_PADDING * 2
   const totalH = maxH + V_PADDING * 2
 
@@ -40,13 +57,11 @@ export function renderFlowIntoFrame(editor: Editor, flow: FlowSpec, frameId: TLS
     props: { w: totalW, h: totalH, name: flow.title },
   })
 
-  // Track per-node positions (relative to frame) for arrow routing
   const posMap: Record<string, { x: number; y: number; h: number }> = {}
 
   flow.nodes.forEach((node, i) => {
-    const h = nodeHeight(node)
+    const h = heights[i]!
     const x = H_PADDING + i * (NODE_W + H_GAP)
-    // Vertically centre nodes within the frame
     const y = V_PADDING + (maxH - h) / 2
     posMap[node.id] = { x, y, h }
 
@@ -74,7 +89,7 @@ export function renderFlowIntoFrame(editor: Editor, flow: FlowSpec, frameId: TLS
     })
   })
 
-  // Draw arrows between nodes
+  // Draw arrows with data-flow labels
   flow.edges.forEach((edge) => {
     const from = posMap[edge.from]
     const to = posMap[edge.to]
@@ -84,6 +99,8 @@ export function renderFlowIntoFrame(editor: Editor, flow: FlowSpec, frameId: TLS
     const sy = from.y + from.h / 2
     const ex = to.x
     const ey = to.y + to.h / 2
+
+    const label = edgeLabel(flow, edge.from, edge.to, edge.label ?? '')
 
     editor.createShape({
       id: createShapeId(`${frameId}-arrow-${edge.from}-${edge.to}`),
@@ -96,7 +113,7 @@ export function renderFlowIntoFrame(editor: Editor, flow: FlowSpec, frameId: TLS
         end: { x: ex - sx, y: ey - sy },
         color: 'grey',
         size: 's',
-        text: edge.label ?? '',
+        text: label,
       },
     })
   })

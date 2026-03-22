@@ -72,9 +72,11 @@ OUTPUT FORMAT (when intent is clear) — return ONLY valid JSON:
     }
   ],
   "edges": [
-    { "from": "n1", "to": "n2", "label": "optional edge label" }
+    { "from": "n1", "to": "n2", "label": "output_key" }
   ]
 }
+
+EDGE LABELS: always set label to the primary output key being passed (e.g. "wallet_address", "resolved_address", "wallets", "ens_name"). This is displayed on the arrow in the diagram.
 
 COMPOSITION RULES:
 1. Extract ALL values from the user's prompt into "params". "requiredInputs" is only for genuinely missing values.

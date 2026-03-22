@@ -31,7 +31,7 @@ export const EXAMPLE_FLOW: FlowSpec = {
     },
   ],
   edges: [
-    { from: 'n1', to: 'n2', label: 'address' },
-    { from: 'n2', to: 'n3', label: 'ens name' },
+    { from: 'n1', to: 'n2', label: 'resolved_address' },
+    { from: 'n2', to: 'n3', label: 'ens_name' },
   ],
 }

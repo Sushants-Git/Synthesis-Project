@@ -41,8 +41,8 @@ function recomputeFramePositions(editor: Editor): FrameButtonPos[] {
   for (const id of flowFrameIds) {
     const bounds = editor.getShapePageBounds(id as TLShapeId)
     if (!bounds) continue
-    const topLeft = editor.pageToScreen({ x: bounds.x, y: bounds.y })
-    out.push({ frameId: id as TLShapeId, screenX: topLeft.x, screenY: topLeft.y - 44 })
+    const bottomLeft = editor.pageToScreen({ x: bounds.x, y: bounds.y + bounds.h })
+    out.push({ frameId: id as TLShapeId, screenX: bottomLeft.x, screenY: bottomLeft.y })
   }
   return out
 }
@@ -271,7 +271,7 @@ export default function FlowCanvas() {
             className="fixed z-40 flex gap-1.5 animate-fade-up"
             style={{
               left: Math.max(btn.screenX, SIDEBAR_W + 8),
-              top: Math.max(btn.screenY, 8),
+              top: btn.screenY + 8,
             }}
           >
             <button
