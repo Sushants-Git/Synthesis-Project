@@ -1,24 +1,40 @@
-/**
- * Parses a natural language transaction intent into a FlowSpec —
- * a structured JSON representation of nodes and edges for the canvas.
- */
-
 import { chat } from './index.ts'
 
 export type NodeType =
   | 'wallet'
+  | 'ens_resolve'
   | 'api_call'
   | 'approval_gate'
   | 'action'
   | 'output'
   | 'filter'
+  | 'twitter_search'
+
+export type ExecutionType =
+  | 'eth_transfer'
+  | 'ens_resolve'
+  | 'twitter_search'
+  | 'approval'
+  | 'api_call'
+  | null
+
+export interface InputField {
+  key: string
+  label: string
+  placeholder: string
+  inputType: 'address' | 'eth_amount' | 'text' | 'ens_name'
+}
 
 export interface FlowNode {
   id: string
   type: NodeType
   label: string
   description: string
-  /** Optional metadata (e.g. address, API endpoint, filter criteria) */
+  executionType?: ExecutionType
+  /** Values extracted directly from the user's prompt */
+  params?: Record<string, string>
+  /** Fields the user must fill in (only what's genuinely missing from the prompt) */
+  requiredInputs?: InputField[]
   meta?: Record<string, string>
 }
 
@@ -35,21 +51,51 @@ export interface FlowSpec {
   edges: FlowEdge[]
 }
 
-const SYSTEM_PROMPT = `You are a transaction flow planner for a visual blockchain transaction builder called FlowTx.
+const SYSTEM_PROMPT = `You are FlowTx, a visual blockchain transaction planner. Given a natural language description, output a structured JSON FlowSpec representing the execution steps.
 
-Given a natural language description of what a user wants to do, output a JSON FlowSpec with:
-- title: short title for the flow
-- description: one sentence summary
-- nodes: array of steps, each with { id, type, label, description, meta? }
-  - types: wallet | api_call | approval_gate | action | output | filter
-- edges: array of connections { from, to, label? }
+OUTPUT FORMAT — return ONLY valid JSON, no markdown, no explanation:
+{
+  "title": "Short title (3-5 words)",
+  "description": "One sentence summary",
+  "nodes": [
+    {
+      "id": "n1",
+      "type": "wallet|ens_resolve|api_call|approval_gate|action|output|filter|twitter_search",
+      "label": "Short label (2-4 words)",
+      "description": "What this step does",
+      "executionType": "eth_transfer|ens_resolve|twitter_search|approval|api_call|null",
+      "params": { "key": "value extracted from prompt" },
+      "requiredInputs": [
+        { "key": "fieldKey", "label": "Human label", "placeholder": "e.g. 0.1", "inputType": "address|eth_amount|text|ens_name" }
+      ]
+    }
+  ],
+  "edges": [{ "from": "n1", "to": "n2", "label": "optional" }]
+}
 
-Always include an approval_gate before any action that moves funds or posts externally.
-Use ENS names wherever possible instead of hex addresses.
-Return ONLY valid JSON. No markdown, no explanation.`
+NODE TYPES:
+- wallet: the user's connected wallet (source of funds)
+- ens_resolve: resolve an ENS name to an address (executionType: "ens_resolve")
+- approval_gate: user must approve before funds move (executionType: "approval")
+- action: executes a blockchain transaction (executionType: "eth_transfer" for ETH sends)
+- twitter_search: searches Twitter for criteria (executionType: "twitter_search")
+- filter: filter/rank results
+- output: shows the result/confirmation
+- api_call: external API call
+
+RULES:
+1. Extract ALL values from the prompt into params (amount, ENS names, addresses, criteria)
+2. Only put in requiredInputs what's GENUINELY missing from the prompt
+3. Always include an approval_gate before any fund transfer
+4. If a recipient is an ENS name, include an ens_resolve node before the action
+5. Always end with an output node showing confirmation
+6. The wallet node should have params.action describing what it will do
+7. For ETH transfers: action node params must include "amount" (in ETH) and "to" (address or ENS)
+
+EXAMPLE — "send 0.5 ETH to vitalik.eth":
+nodes: wallet(params:{action:"send 0.5 ETH"}) → ens_resolve(params:{ens_name:"vitalik.eth"}, executionType:"ens_resolve") → approval_gate(params:{amount:"0.5",to:"vitalik.eth"}, executionType:"approval") → action(params:{amount:"0.5",to:"vitalik.eth"}, executionType:"eth_transfer") → output`
 
 function extractJSON(text: string): string {
-  // Strip markdown code fences (```json ... ``` or ``` ... ```)
   const match = text.match(/```(?:json)?\s*([\s\S]*?)```/)
   if (match?.[1]) return match[1].trim()
   return text.trim()

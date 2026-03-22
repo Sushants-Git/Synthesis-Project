@@ -2,20 +2,22 @@ import { Tldraw, type Editor, type TLShapeId } from '@tldraw/tldraw'
 import '@tldraw/tldraw/tldraw.css'
 import { useCallback, useRef, useState } from 'react'
 import FloatingPrompt from '../components/FloatingPrompt.tsx'
-import { parseIntent } from '../ai/flowParser.ts'
+import FlowExecutor from '../components/FlowExecutor.tsx'
+import { parseIntent, type FlowSpec } from '../ai/flowParser.ts'
 import { renderFlowIntoFrame, renderFlowAtPoint } from './renderFlow.ts'
 
 interface PromptState {
   screenX: number
   screenY: number
   mode: 'create' | 'modify'
-  /** If set: fill this existing frame. If not set: create a new frame at pagePos. */
   frameId?: TLShapeId
   pageX?: number
   pageY?: number
 }
 
-/** IDs of frames we created (so we can detect them for "Modify") */
+// Maps frameId → FlowSpec so we can execute/modify later
+const flowSpecMap = new Map<string, FlowSpec>()
+// Tracks which frames were created by us
 const flowFrameIds = new Set<string>()
 
 export default function FlowCanvas() {
@@ -23,43 +25,43 @@ export default function FlowCanvas() {
   const [promptState, setPromptState] = useState<PromptState | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [modifyButton, setModifyButton] = useState<{
+  const [selectedFlowFrame, setSelectedFlowFrame] = useState<{
     frameId: TLShapeId
     screenX: number
     screenY: number
   } | null>(null)
+  const [executingFlow, setExecutingFlow] = useState<FlowSpec | null>(null)
 
   const handleMount = useCallback((editor: Editor) => {
     editorRef.current = editor
 
-    // Detect new frames drawn by user (via the F / frame tool)
-    const unsubscribe = editor.store.listen((entry) => {
-      if (entry.source !== 'user') return
-
-      // New frame added
-      for (const record of Object.values(entry.changes.added)) {
-        if (
-          record.typeName === 'shape' &&
-          (record as { type: string }).type === 'frame'
-        ) {
-          const id = (record as { id: TLShapeId }).id
-          const bounds = editor.getShapePageBounds(id)
-          if (!bounds) continue
-          const center = editor.pageToScreen({
-            x: bounds.x + bounds.w / 2,
-            y: bounds.y + bounds.h / 2,
-          })
-          flowFrameIds.add(id)
-          setPromptState({
-            screenX: center.x,
-            screenY: center.y,
-            mode: 'create',
-            frameId: id,
-          })
+    editor.store.listen((entry) => {
+      // Detect new frames drawn by user (Frame tool / F key)
+      if (entry.source === 'user') {
+        for (const record of Object.values(entry.changes.added)) {
+          if (
+            record.typeName === 'shape' &&
+            (record as { type: string }).type === 'frame'
+          ) {
+            const id = (record as { id: TLShapeId }).id
+            const bounds = editor.getShapePageBounds(id)
+            if (!bounds) continue
+            flowFrameIds.add(id)
+            const center = editor.pageToScreen({
+              x: bounds.x + bounds.w / 2,
+              y: bounds.y + bounds.h / 2,
+            })
+            setPromptState({
+              screenX: center.x,
+              screenY: center.y,
+              mode: 'create',
+              frameId: id,
+            })
+          }
         }
       }
 
-      // Track selection changes to show/hide Modify button
+      // Track selection to show Modify/Execute buttons
       const selected = editor.getSelectedShapes()
       const frame = selected.find(
         (s) => s.type === 'frame' && flowFrameIds.has(s.id),
@@ -68,29 +70,26 @@ export default function FlowCanvas() {
         const bounds = editor.getShapePageBounds(frame.id)
         if (bounds) {
           const topLeft = editor.pageToScreen({ x: bounds.x, y: bounds.y })
-          setModifyButton({
+          setSelectedFlowFrame({
             frameId: frame.id,
             screenX: topLeft.x,
             screenY: topLeft.y - 44,
           })
+          return
         }
-      } else {
-        setModifyButton(null)
       }
+      setSelectedFlowFrame(null)
     })
-
-    return () => unsubscribe()
   }, [])
 
-  /** Double-click on empty canvas space → show prompt at cursor */
   const handleDoubleClick = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
       const editor = editorRef.current
-      if (!editor || promptState?.mode) return
+      if (!editor || promptState) return
 
       const pagePos = editor.screenToPage({ x: e.clientX, y: e.clientY })
       const shapesAtPoint = editor.getShapesAtPoint(pagePos)
-      if (shapesAtPoint.length > 0) return // clicking on a shape, let tldraw handle it
+      if (shapesAtPoint.length > 0) return
 
       setPromptState({
         screenX: e.clientX,
@@ -114,13 +113,13 @@ export default function FlowCanvas() {
         const editor = editorRef.current
 
         if (promptState.frameId) {
-          // Fill existing frame
           renderFlowIntoFrame(editor, flow, promptState.frameId)
           flowFrameIds.add(promptState.frameId)
+          flowSpecMap.set(promptState.frameId, flow)
         } else if (promptState.pageX !== undefined && promptState.pageY !== undefined) {
-          // Create new frame at click position
           const id = renderFlowAtPoint(editor, flow, promptState.pageX, promptState.pageY)
           flowFrameIds.add(id)
+          flowSpecMap.set(id, flow)
         }
 
         setPromptState(null)
@@ -134,21 +133,27 @@ export default function FlowCanvas() {
   )
 
   const openModify = useCallback(() => {
-    if (!modifyButton || !editorRef.current) return
-    const bounds = editorRef.current.getShapePageBounds(modifyButton.frameId)
+    if (!selectedFlowFrame || !editorRef.current) return
+    const bounds = editorRef.current.getShapePageBounds(selectedFlowFrame.frameId)
     if (!bounds) return
     const center = editorRef.current.pageToScreen({
       x: bounds.x + bounds.w / 2,
       y: bounds.y + bounds.h / 2,
     })
-    setModifyButton(null)
+    setSelectedFlowFrame(null)
     setPromptState({
       screenX: center.x,
       screenY: center.y,
       mode: 'modify',
-      frameId: modifyButton.frameId,
+      frameId: selectedFlowFrame.frameId,
     })
-  }, [modifyButton])
+  }, [selectedFlowFrame])
+
+  const openExecute = useCallback(() => {
+    if (!selectedFlowFrame) return
+    const flow = flowSpecMap.get(selectedFlowFrame.frameId)
+    if (flow) setExecutingFlow(flow)
+  }, [selectedFlowFrame])
 
   return (
     <div className="relative w-full h-full" onDoubleClick={handleDoubleClick}>
@@ -158,24 +163,34 @@ export default function FlowCanvas() {
       {error && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-red-900/90 border border-red-700 text-red-200 text-sm px-4 py-2 rounded-lg shadow-lg max-w-md text-center">
           {error}
-          <button
-            className="ml-3 text-red-400 hover:text-red-200"
-            onClick={() => setError(null)}
-          >
+          <button className="ml-3 text-red-400 hover:text-red-200" onClick={() => setError(null)}>
             ✕
           </button>
         </div>
       )}
 
-      {/* "Modify Flow" button that appears when a flow frame is selected */}
-      {modifyButton && !promptState && (
-        <button
-          className="fixed z-40 px-3 py-1 bg-zinc-800 hover:bg-zinc-700 border border-zinc-600 text-zinc-200 text-xs font-medium rounded-lg shadow-lg transition-colors"
-          style={{ left: modifyButton.screenX, top: Math.max(modifyButton.screenY, 8) }}
-          onClick={openModify}
+      {/* Floating action buttons for selected flow frame */}
+      {selectedFlowFrame && !promptState && !executingFlow && (
+        <div
+          className="fixed z-40 flex gap-1"
+          style={{
+            left: Math.max(selectedFlowFrame.screenX, 8),
+            top: Math.max(selectedFlowFrame.screenY, 8),
+          }}
         >
-          Modify Flow
-        </button>
+          <button
+            onClick={openExecute}
+            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-lg shadow-lg transition-colors"
+          >
+            ⚡ Execute
+          </button>
+          <button
+            onClick={openModify}
+            className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-600 text-zinc-200 text-xs font-medium rounded-lg shadow-lg transition-colors"
+          >
+            Modify
+          </button>
+        </div>
       )}
 
       {/* Contextual floating prompt */}
@@ -188,7 +203,6 @@ export default function FlowCanvas() {
           onSubmit={handleSubmit}
           onClose={() => {
             setPromptState(null)
-            // If we opened for a brand-new empty frame, delete it
             if (promptState.frameId && !loading) {
               const editor = editorRef.current
               if (editor) {
@@ -203,12 +217,20 @@ export default function FlowCanvas() {
         />
       )}
 
-      {/* Hints overlay (bottom-left) */}
-      {!promptState && (
+      {/* Flow Executor panel */}
+      {executingFlow && (
+        <FlowExecutor
+          flow={executingFlow}
+          onClose={() => setExecutingFlow(null)}
+        />
+      )}
+
+      {/* Hints */}
+      {!promptState && !executingFlow && (
         <div className="fixed bottom-4 left-4 z-30 text-xs text-zinc-600 space-y-0.5 pointer-events-none select-none">
-          <div>F → draw a frame to place a flow</div>
+          <div>F → draw a frame → describe a flow</div>
           <div>Double-click empty canvas → quick flow</div>
-          <div>Select a flow frame → Modify</div>
+          <div>Select a flow → ⚡ Execute or Modify</div>
         </div>
       )}
 

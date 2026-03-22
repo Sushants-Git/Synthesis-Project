@@ -1,28 +1,55 @@
 import { createShapeId, toRichText, type Editor, type TLShapeId } from '@tldraw/tldraw'
-import type { FlowSpec, NodeType } from '../ai/flowParser.ts'
+import type { FlowSpec, FlowNode, NodeType } from '../ai/flowParser.ts'
 
-const NODE_W = 180
-const NODE_H = 68
+const NODE_W = 200
+const NODE_H = 80
 const H_GAP = 90
 const PADDING = 32
-const HEADER_H = 36 // tldraw frame header
+const HEADER_H = 36
 
-function nodeColor(type: NodeType): string {
-  const map: Record<NodeType, string> = {
+const TYPE_ICON: Record<string, string> = {
+  wallet: '💼',
+  ens_resolve: '🔍',
+  approval_gate: '🔐',
+  action: '⚡',
+  output: '✅',
+  filter: '🔀',
+  api_call: '🌐',
+  twitter_search: '🐦',
+}
+
+function nodeColor(type: NodeType | string): string {
+  const map: Record<string, string> = {
     wallet: 'blue',
+    ens_resolve: 'violet',
     api_call: 'violet',
     approval_gate: 'orange',
     action: 'green',
     output: 'light-blue',
     filter: 'red',
+    twitter_search: 'light-blue',
   }
   return map[type] ?? 'grey'
 }
 
+/** Format a node label with its key params for display on the canvas */
+function nodeLabel(node: FlowNode): string {
+  const icon = TYPE_ICON[node.type] ?? '▸'
+  const title = `${icon} ${node.label}`
+
+  const keyParams: string[] = []
+  const params = node.params ?? {}
+
+  if (params.amount) keyParams.push(`${params.amount} ETH`)
+  if (params.to) keyParams.push(`→ ${params.to}`)
+  if (params.ens_name) keyParams.push(params.ens_name)
+  if (params.action && !params.amount) keyParams.push(params.action)
+
+  return keyParams.length > 0 ? `${title}\n${keyParams.join('  ')}` : title
+}
+
 /**
  * Renders a FlowSpec into an existing tldraw Frame.
- * Clears any existing children, resizes the frame to fit the flow,
- * then places nodes + arrows inside it.
  */
 export function renderFlowIntoFrame(
   editor: Editor,
@@ -32,7 +59,6 @@ export function renderFlowIntoFrame(
   const frame = editor.getShape(frameId)
   if (!frame) return
 
-  // Clear existing children
   const children = editor.getSortedChildIdsForParent(frameId)
   if (children.length > 0) editor.deleteShapes(children)
 
@@ -40,27 +66,22 @@ export function renderFlowIntoFrame(
   const totalW = nodeCount * NODE_W + (nodeCount - 1) * H_GAP + PADDING * 2
   const totalH = NODE_H + PADDING * 2 + HEADER_H
 
-  // Resize frame to fit content
   editor.updateShape({
     id: frameId,
     type: 'frame',
     props: { w: totalW, h: totalH, name: flow.title },
   })
 
-  // Build id map and position map
-  const idMap: Record<string, TLShapeId> = {}
   const posMap: Record<string, { x: number; y: number }> = {}
 
   flow.nodes.forEach((node, i) => {
-    const id = createShapeId()
-    idMap[node.id] = id
     const x = PADDING + i * (NODE_W + H_GAP)
     const y = PADDING
     posMap[node.id] = { x, y }
 
     const isDiamond = node.type === 'approval_gate'
     editor.createShape({
-      id,
+      id: createShapeId(`${frameId}-${node.id}`),
       type: 'geo',
       parentId: frameId,
       x,
@@ -68,8 +89,8 @@ export function renderFlowIntoFrame(
       props: {
         geo: isDiamond ? 'diamond' : 'rectangle',
         w: NODE_W,
-        h: isDiamond ? NODE_H * 1.25 : NODE_H,
-        richText: toRichText(node.label),
+        h: isDiamond ? NODE_H * 1.3 : NODE_H,
+        richText: toRichText(nodeLabel(node)),
         fill: 'solid',
         color: nodeColor(node.type),
         size: 's',
@@ -80,7 +101,6 @@ export function renderFlowIntoFrame(
     })
   })
 
-  // Draw arrows between nodes
   flow.edges.forEach((edge) => {
     const fromPos = posMap[edge.from]
     const toPos = posMap[edge.to]
@@ -92,7 +112,7 @@ export function renderFlowIntoFrame(
     const ey = toPos.y + NODE_H / 2
 
     editor.createShape({
-      id: createShapeId(),
+      id: createShapeId(`${frameId}-arrow-${edge.from}-${edge.to}`),
       type: 'arrow',
       parentId: frameId,
       x: sx,
@@ -107,11 +127,10 @@ export function renderFlowIntoFrame(
     })
   })
 
-  // Zoom to the frame
-  editor.zoomToBounds(editor.getShapePageBounds(frameId)!, {
-    animation: { duration: 400 },
-    inset: 60,
-  })
+  const bounds = editor.getShapePageBounds(frameId)
+  if (bounds) {
+    editor.zoomToBounds(bounds, { animation: { duration: 400 }, inset: 80 })
+  }
 }
 
 /**
@@ -123,19 +142,14 @@ export function renderFlowAtPoint(
   pageX: number,
   pageY: number,
 ): TLShapeId {
-  const nodeCount = flow.nodes.length
-  const totalW = nodeCount * NODE_W + (nodeCount - 1) * H_GAP + PADDING * 2
-  const totalH = NODE_H + PADDING * 2 + HEADER_H
-
   const frameId = createShapeId()
   editor.createShape({
     id: frameId,
     type: 'frame',
     x: pageX,
     y: pageY,
-    props: { w: totalW, h: totalH, name: flow.title },
+    props: { w: 600, h: 200, name: flow.title },
   })
-
   renderFlowIntoFrame(editor, flow, frameId)
   return frameId
 }
