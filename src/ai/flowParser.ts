@@ -48,7 +48,7 @@ RESPONSE RULES:
 - If intent is ambiguous → ask ONE short clarifying question as plain text (no JSON).
 - Never mix JSON and explanation in the same response.
 
-AVAILABLE PLUGINS:
+AVAILABLE PLUGINS (format: pluginId:action(required*, optional?) → [outputs]):
 ${buildPluginContext()}
 
 SYSTEM NODES (plugin: "system"):
@@ -71,6 +71,11 @@ JSON OUTPUT FORMAT:
   ],
   "edges": [{ "from": "n1", "to": "n2", "label": "output_key_name" }]
 }
+
+@MENTION RULES:
+- If the user writes @pluginId (e.g. @coingecko, @my_api), they are explicitly requesting that plugin.
+- Always use the mentioned plugin in the flow, matched by exact pluginId.
+- @pluginId:action is also valid and pins both plugin and action.
 
 PARAM RULES:
 - Put every value mentioned in the user's prompt into "params" (amounts, addresses, names, URLs, etc.)

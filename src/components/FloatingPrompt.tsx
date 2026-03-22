@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ConversationMessage, FlowSpec } from '../ai/flowParser.ts'
+import { getPluginList, type Plugin } from '../plugins/registry.ts'
 
 /** Render a message bubble — collapses raw FlowSpec JSON into a summary pill. */
 function MessageBubble({ m }: { m: ConversationMessage }) {
@@ -43,7 +44,13 @@ function MessageBubble({ m }: { m: ConversationMessage }) {
         ? 'bg-blue-50 text-blue-900 ml-6 text-right'
         : 'bg-zinc-50 border border-zinc-200 text-zinc-700 mr-6'
     }`}>
-      {m.content}
+      {m.content.split(/(@\w+)/g).map((part, i) =>
+        part.startsWith('@') ? (
+          <code key={i} className="text-[11px] font-mono bg-blue-100 text-blue-700 rounded px-1 mx-0.5">
+            {part}
+          </code>
+        ) : part
+      )}
     </div>
   )
 }
@@ -60,6 +67,13 @@ interface Props {
   onClose: () => void
 }
 
+interface MentionState {
+  query: string
+  atIndex: number   // index of '@' in value string
+  results: Plugin[]
+  selected: number
+}
+
 export default function FloatingPrompt({
   screenX,
   screenY,
@@ -71,6 +85,7 @@ export default function FloatingPrompt({
   onClose,
 }: Props) {
   const [value, setValue] = useState(initialValue)
+  const [mention, setMention] = useState<MentionState | null>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const threadRef = useRef<HTMLDivElement>(null)
 
@@ -78,7 +93,6 @@ export default function FloatingPrompt({
     inputRef.current?.focus()
   }, [])
 
-  // Scroll thread to bottom whenever messages change
   useEffect(() => {
     if (threadRef.current) {
       threadRef.current.scrollTop = threadRef.current.scrollHeight
@@ -87,18 +101,90 @@ export default function FloatingPrompt({
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+      if (e.key === 'Escape') {
+        if (mention) { setMention(null); return }
+        onClose()
+      }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [onClose])
+  }, [onClose, mention])
+
+  const insertMention = (plugin: Plugin) => {
+    if (!mention) return
+    const before = value.slice(0, mention.atIndex)
+    const after = value.slice(mention.atIndex + 1 + mention.query.length)
+    const inserted = `@${plugin.id} `
+    const next = before + inserted + after
+    setValue(next)
+    setMention(null)
+    // Re-focus and move cursor after the inserted mention
+    requestAnimationFrame(() => {
+      const el = inputRef.current
+      if (!el) return
+      el.focus()
+      const pos = before.length + inserted.length
+      el.setSelectionRange(pos, pos)
+    })
+  }
+
+  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const val = e.target.value
+    setValue(val)
+
+    const cursor = e.target.selectionStart ?? val.length
+    const textBefore = val.slice(0, cursor)
+    // Match a bare @ or @word immediately before cursor (no spaces after @)
+    const atMatch = textBefore.match(/@(\w*)$/)
+    if (atMatch) {
+      const query = atMatch[1].toLowerCase()
+      const all = getPluginList()
+      const results = all.filter(
+        (p) => p.name.toLowerCase().includes(query) || p.id.toLowerCase().includes(query),
+      )
+      if (results.length > 0) {
+        setMention({
+          query,
+          atIndex: textBefore.length - 1 - query.length,
+          results,
+          selected: 0,
+        })
+        return
+      }
+    }
+    setMention(null)
+  }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (mention) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        setMention((m) => m && { ...m, selected: (m.selected + 1) % m.results.length })
+        return
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        setMention((m) => m && { ...m, selected: (m.selected - 1 + m.results.length) % m.results.length })
+        return
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault()
+        const plugin = mention.results[mention.selected]
+        if (plugin) insertMention(plugin)
+        return
+      }
+      if (e.key === 'Escape') {
+        setMention(null)
+        return
+      }
+    }
+
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       if (value.trim() && !loading) {
         onSubmit(value.trim())
         setValue('')
+        setMention(null)
       }
     }
   }
@@ -163,6 +249,41 @@ export default function FloatingPrompt({
 
           {/* Input area */}
           <div className="px-3 pt-2 pb-3 shrink-0">
+            {/* @mention picker */}
+            {mention && mention.results.length > 0 && (
+              <div className="mb-1.5 bg-white border border-zinc-200 rounded-xl shadow-lg overflow-hidden">
+                <div className="px-3 py-1.5 border-b border-zinc-100 flex items-center gap-1.5">
+                  <span className="text-[9px] text-zinc-400 uppercase tracking-widest font-medium">Plugins</span>
+                  <code className="text-[9px] text-blue-500 font-mono bg-blue-50 rounded px-1">@{mention.query}</code>
+                </div>
+                <div className="max-h-40 overflow-y-auto">
+                  {mention.results.map((p, i) => (
+                    <button
+                      key={p.id}
+                      onMouseDown={(e) => { e.preventDefault(); insertMention(p) }}
+                      className={`w-full flex items-center gap-2.5 px-3 py-2 text-left transition-colors duration-75 ${
+                        i === mention.selected ? 'bg-blue-50' : 'hover:bg-zinc-50'
+                      }`}
+                    >
+                      <span className="text-base shrink-0 leading-none">{p.icon}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-medium text-zinc-800">{p.name}</span>
+                          {p.category === 'soft' && (
+                            <span className="text-[8px] text-emerald-600 bg-emerald-50 border border-emerald-100 rounded-full px-1 leading-4">mine</span>
+                          )}
+                        </div>
+                        <div className="text-[9px] text-zinc-400 truncate">
+                          @{p.id} · {p.capabilities.map((c) => c.action).join(', ')}
+                        </div>
+                      </div>
+                      <kbd className="text-[8px] text-zinc-300 shrink-0">↵</kbd>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <textarea
               ref={inputRef}
               className={`w-full bg-zinc-50 border rounded-lg px-3 py-2 text-sm text-zinc-900 placeholder-zinc-400 outline-none resize-none transition-[border-color,box-shadow] duration-150 ${
@@ -172,13 +293,13 @@ export default function FloatingPrompt({
               } ${hasThread ? 'min-h-[52px]' : 'min-h-[72px]'}`}
               placeholder={
                 hasThread
-                  ? 'Reply or clarify…'
+                  ? 'Reply or clarify… (type @ to mention a plugin)'
                   : mode === 'create'
-                  ? 'Describe the transaction flow…'
-                  : 'Describe changes to this flow…'
+                  ? 'Describe the flow… (type @ to use a specific plugin)'
+                  : 'Describe changes… (type @ to pin a plugin)'
               }
               value={value}
-              onChange={(e) => setValue(e.target.value)}
+              onChange={handleChange}
               onKeyDown={handleKeyDown}
               disabled={loading}
             />

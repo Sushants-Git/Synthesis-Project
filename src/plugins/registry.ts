@@ -190,12 +190,24 @@ export function substituteVars(str: string, vars: Record<string, string>): strin
 
 /** Build the plugin descriptions block injected into the AI system prompt */
 export function buildPluginContext(): string {
-  return getPluginList()
-    .map(
-      (p) =>
-        `- ${p.id} (${p.name}${p.prizeTrack ? ` | Prize: ${p.prizeTrack}` : ''}): ${p.aiDescription}`,
-    )
-    .join('\n')
+  const lines: string[] = []
+  for (const p of getPluginList()) {
+    const meta = p.prizeTrack ? ` | Prize: ${p.prizeTrack}` : ''
+    const tag = p.category === 'soft' ? ' [user-built]' : ''
+    lines.push(`- ${p.id} (${p.name}${meta}${tag}): ${p.aiDescription}`)
+    // Include per-action signature so the AI knows exact action IDs, required inputs, outputs
+    for (const cap of p.capabilities) {
+      const required = cap.params.filter((x) => x.required).map((x) => x.key)
+      const optional = cap.params.filter((x) => !x.required).map((x) => x.key)
+      const paramStr = [
+        ...(required.map((k) => `${k}*`)),
+        ...(optional.map((k) => `${k}?`)),
+      ].join(', ')
+      const outStr = cap.outputs.length ? cap.outputs.join(', ') : 'none'
+      lines.push(`  · ${p.id}:${cap.action}(${paramStr}) → [${outStr}]`)
+    }
+  }
+  return lines.join('\n')
 }
 
 export function getPlugin(id: string): Plugin | undefined {
