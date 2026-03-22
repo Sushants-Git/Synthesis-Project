@@ -85,11 +85,19 @@ export const MetaMaskPlugin: Plugin = {
         const amount =
           params.amount ?? params.value ?? params.eth ??
           ctx.inputs.amount ?? ctx.inputs.value
-        const from = ctx.walletAddress ?? ctx.resolved.wallet_address
+        let from = ctx.walletAddress ?? ctx.resolved.wallet_address
+        if (!from) {
+          try {
+            from = (await getConnectedAccount()) ?? (await connectWallet())
+            ctx.walletAddress = from
+            ctx.resolved.wallet_address = from
+          } catch (e) {
+            return { status: 'error', error: 'Could not connect wallet: ' + String(e) }
+          }
+        }
 
         if (!to) return { status: 'error', error: 'Recipient address required' }
         if (!amount) return { status: 'error', error: 'Amount required' }
-        if (!from) return { status: 'error', error: 'Wallet not connected' }
 
         try {
           const txHash = await sendETH(from, to, amount)
@@ -147,8 +155,16 @@ export const MetaMaskPlugin: Plugin = {
         }
         if (!amount) return { status: 'error', error: 'amount or total_amount required' }
 
-        const from = ctx.walletAddress ?? ctx.resolved.wallet_address
-        if (!from) return { status: 'error', error: 'Wallet not connected — add a metamask:connect_wallet step' }
+        let from = ctx.walletAddress ?? ctx.resolved.wallet_address
+        if (!from) {
+          try {
+            from = (await getConnectedAccount()) ?? (await connectWallet())
+            ctx.walletAddress = from
+            ctx.resolved.wallet_address = from
+          } catch (e) {
+            return { status: 'error', error: 'Could not connect wallet: ' + String(e) }
+          }
+        }
 
         const txHashes: string[] = []
         for (const to of wallets) {

@@ -6,8 +6,8 @@ export const GoogleSheetsPlugin: Plugin = {
   description: 'Read rows from a public Google Sheet — no API key required',
   aiDescription:
     'Google Sheets integration. Reads data from a public Google Sheet — no API key needed. ' +
-    'Action: fetch_rows — takes sheet_url (full Google Sheets URL). ' +
-    'Outputs: rows (flat JSON array of values from first column, for wallet lists), ' +
+    'Action: fetch_rows — takes sheet_url (full Google Sheets URL) and optional column_name (exact column header to extract, e.g. "wallet_address" — defaults to first column if omitted). ' +
+    'Outputs: rows (flat JSON array of values from the specified column, for wallet lists), ' +
     'table (2D JSON array with header row — for display), count (number of data rows). ' +
     'Sheet must be shared as "Anyone with the link can view". ' +
     'Connect rows/wallets output to metamask:batch_send to send ETH to each address.',
@@ -25,6 +25,13 @@ export const GoogleSheetsPlugin: Plugin = {
           placeholder: 'https://docs.google.com/spreadsheets/d/...',
           inputType: 'text',
           required: true,
+        },
+        {
+          key: 'column_name',
+          label: 'Column Name (optional)',
+          placeholder: 'e.g. wallet_address — defaults to first column',
+          inputType: 'text',
+          required: false,
         },
       ],
       outputs: ['rows', 'wallets', 'table', 'count'],
@@ -86,8 +93,19 @@ export const GoogleSheetsPlugin: Plugin = {
         )
         .filter((row) => row.some((v) => v !== ''))
 
-      // Flat list from first column — for wallet lists / batch_send
-      const firstColValues = bodyRows.map((row) => row[0] ?? '').filter(Boolean)
+      // Flat list from a specific column — defaults to first column
+      const columnName = params.column_name ?? ctx.inputs.column_name
+      const colIndex = columnName
+        ? headers.findIndex((h) => h.toLowerCase() === columnName.toLowerCase())
+        : 0
+      const resolvedColIndex = colIndex === -1 ? 0 : colIndex
+      if (columnName && colIndex === -1) {
+        return {
+          status: 'error',
+          error: `Column "${columnName}" not found. Available columns: ${headers.join(', ')}`,
+        }
+      }
+      const firstColValues = bodyRows.map((row) => row[resolvedColIndex] ?? '').filter(Boolean)
 
       // Full 2D table with header row for display
       const tableGrid = headers.length > 0 ? [headers, ...bodyRows] : bodyRows
