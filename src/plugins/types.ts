@@ -53,3 +53,26 @@ export interface Plugin {
     ctx: ExecutionContext,
   ): Promise<PluginResult>
 }
+
+/**
+ * A JSON-serializable plugin definition.
+ * Custom plugins are defined as manifests — no JS required.
+ * When `executeUrl` is set, execute() POSTs to that URL and expects a PluginResult back.
+ * The server receives: { action, params, context: ExecutionContext }
+ */
+export interface PluginManifest {
+  id: string
+  name: string
+  description: string
+  aiDescription: string
+  icon: string
+  /** tldraw color token: orange | blue | green | red | violet | grey | yellow */
+  color: string
+  prizeTrack?: string
+  /**
+   * Your server endpoint. Receives POST { action, params, context } → PluginResult.
+   * Must respond with JSON and include CORS headers (Access-Control-Allow-Origin: *).
+   */
+  executeUrl?: string
+  capabilities: PluginCapability[]
+}

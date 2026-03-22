@@ -49,6 +49,16 @@ export const MetaMaskPlugin: Plugin = {
       outputs: [],
       requiresApproval: true,
     },
+    {
+      action: 'batch_send',
+      label: 'Batch Send ETH',
+      description: 'Send ETH to a list of addresses (reads wallet list from upstream context)',
+      params: [
+        { key: 'amount', label: 'Amount per recipient (ETH)', placeholder: '0.01', inputType: 'eth_amount', required: true },
+      ],
+      outputs: ['tx_hashes', 'sent_count'],
+      requiresApproval: true,
+    },
   ],
 
   async execute(action, params, ctx: ExecutionContext): Promise<PluginResult> {
@@ -107,6 +117,47 @@ export const MetaMaskPlugin: Plugin = {
 
       case 'approve':
         return { status: 'waiting', display: 'Waiting for approval…' }
+
+      case 'batch_send': {
+        const walletsJson = ctx.resolved.wallets ?? ctx.resolved.recipients ?? ctx.inputs.wallets
+        if (!walletsJson) {
+          return { status: 'error', error: 'No wallet list in context — connect a fetch step (e.g. Google Sheets) upstream.' }
+        }
+
+        let wallets: string[]
+        try {
+          wallets = JSON.parse(walletsJson) as string[]
+        } catch {
+          return { status: 'error', error: 'wallet list in context is not valid JSON' }
+        }
+
+        const amount = params.amount ?? ctx.inputs.amount
+        if (!amount) return { status: 'error', error: 'Amount required' }
+
+        const from = ctx.walletAddress ?? ctx.resolved.wallet_address
+        if (!from) return { status: 'error', error: 'Wallet not connected' }
+
+        const txHashes: string[] = []
+        for (const to of wallets) {
+          try {
+            const hash = await sendETH(from, to.trim(), amount)
+            txHashes.push(hash)
+          } catch (e) {
+            return {
+              status: 'error',
+              error: `Failed sending to ${to.slice(0, 10)}…: ${e instanceof Error ? e.message : String(e)}`,
+            }
+          }
+        }
+
+        ctx.resolved.tx_hashes = JSON.stringify(txHashes)
+        ctx.resolved.sent_count = String(txHashes.length)
+        return {
+          status: 'done',
+          outputs: { tx_hashes: JSON.stringify(txHashes), sent_count: String(txHashes.length) },
+          display: `Sent ${amount} ETH × ${txHashes.length} addresses`,
+        }
+      }
 
       default:
         return { status: 'error', error: `Unknown action: ${action}` }

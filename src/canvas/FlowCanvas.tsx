@@ -8,7 +8,7 @@ import { parseIntent, type FlowSpec, type ConversationMessage } from '../ai/flow
 import { renderFlowIntoFrame, renderFlowAtPoint } from './renderFlow.ts'
 import { FlowNodeShapeUtil, PLUGIN_CSS_COLORS } from './FlowNodeShape.tsx'
 import { EXAMPLE_FLOW } from './exampleFlow.ts'
-import { getPlugin } from '../plugins/registry.ts'
+import { getPlugin, loadPersistedPlugins } from '../plugins/registry.ts'
 
 interface PromptState {
   screenX: number
@@ -65,6 +65,7 @@ export default function FlowCanvas() {
 
   const handleMount = useCallback((editor: Editor) => {
     editorRef.current = editor
+    loadPersistedPlugins()
 
     const vp = editor.getViewportScreenBounds()
     const cx = SIDEBAR_W + (vp.w - SIDEBAR_W) / 2
