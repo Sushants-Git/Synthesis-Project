@@ -69,7 +69,7 @@ export function renderFlowIntoFrame(editor: Editor, flow: FlowSpec, frameId: TLS
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     editor.createShape<any>({
-      id: createShapeId(`${frameId}-${node.id}`),
+      id: createShapeId(),
       type: 'flow-node',
       parentId: frameId,
       x,
@@ -103,7 +103,7 @@ export function renderFlowIntoFrame(editor: Editor, flow: FlowSpec, frameId: TLS
     const label = edgeLabel(flow, edge.from, edge.to, edge.label ?? '')
 
     editor.createShape({
-      id: createShapeId(`${frameId}-arrow-${edge.from}-${edge.to}`),
+      id: createShapeId(),
       type: 'arrow',
       parentId: frameId,
       x: sx,

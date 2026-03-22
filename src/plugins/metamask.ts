@@ -27,7 +27,6 @@ export const MetaMaskPlugin: Plugin = {
         { key: 'amount', label: 'Amount (ETH)', placeholder: '0.1', inputType: 'eth_amount', required: true },
       ],
       outputs: ['tx_hash'],
-      requiresApproval: true,
     },
     {
       action: 'create_delegation',
@@ -57,7 +56,6 @@ export const MetaMaskPlugin: Plugin = {
         { key: 'amount', label: 'Amount per recipient (ETH)', placeholder: '0.01', inputType: 'eth_amount', required: true },
       ],
       outputs: ['tx_hashes', 'sent_count'],
-      requiresApproval: true,
     },
   ],
 

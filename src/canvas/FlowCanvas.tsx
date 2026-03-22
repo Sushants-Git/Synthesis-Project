@@ -28,6 +28,32 @@ interface FrameButtonPos {
 const flowSpecMap = new Map<string, FlowSpec>()
 const flowFrameIds = new Set<string>()
 
+/** Find a canvas position that doesn't overlap existing flow frames. */
+function findFreePosition(editor: Editor, approxW: number, approxH: number): { x: number; y: number } {
+  const vp = editor.getViewportScreenBounds()
+  const cx = SIDEBAR_W + (vp.w - SIDEBAR_W) / 2
+  const cy = vp.h / 2
+  const center = editor.screenToPage({ x: cx, y: cy })
+
+  if (flowFrameIds.size === 0) {
+    return { x: center.x - approxW / 2, y: center.y - approxH / 2 }
+  }
+
+  // Place below the bottom-most existing frame, vertically stacked with a gap
+  let maxBottom = -Infinity
+  let leftX = center.x - approxW / 2
+  for (const id of flowFrameIds) {
+    const b = editor.getShapePageBounds(id as TLShapeId)
+    if (!b) continue
+    if (b.y + b.h > maxBottom) {
+      maxBottom = b.y + b.h
+      leftX = b.x
+    }
+  }
+
+  return { x: leftX, y: maxBottom + 60 }
+}
+
 const SIDEBAR_W = 224
 const SHAPE_UTILS = [FlowNodeShapeUtil]
 
@@ -68,13 +94,19 @@ export default function FlowCanvas() {
     editorRef.current = editor
     loadPersistedPlugins()
 
+    // Clear any shapes tldraw persisted from a previous session — prevents stacking on reload
+    const existing = editor.getCurrentPageShapeIds()
+    if (existing.size > 0) editor.deleteShapes([...existing])
+    flowFrameIds.clear()
+    flowSpecMap.clear()
+
     const vp = editor.getViewportScreenBounds()
     const cx = SIDEBAR_W + (vp.w - SIDEBAR_W) / 2
     const cy = vp.h / 2
     const pagePos = editor.screenToPage({ x: cx, y: cy })
     const nodeCount = EXAMPLE_FLOW.nodes.length
-    const approxFrameW = nodeCount * 200 + (nodeCount - 1) * 80 + 64
-    const approxFrameH = 140
+    const approxFrameW = nodeCount * 220 + (nodeCount - 1) * 80 + 64
+    const approxFrameH = 200
 
     const exampleId = renderFlowAtPoint(
       editor,
@@ -165,8 +197,13 @@ export default function FlowCanvas() {
             renderFlowIntoFrame(editor, result.flow, promptState.frameId)
             flowFrameIds.add(promptState.frameId)
             flowSpecMap.set(promptState.frameId, result.flow)
-          } else if (promptState.pageX !== undefined && promptState.pageY !== undefined) {
-            const id = renderFlowAtPoint(editor, result.flow, promptState.pageX, promptState.pageY)
+          } else {
+            // Estimate frame size so we can find a non-overlapping position
+            const nodeCount = result.flow.nodes.length
+            const approxW = nodeCount * 220 + (nodeCount - 1) * 80 + 64
+            const approxH = 200
+            const pos = findFreePosition(editor, approxW, approxH)
+            const id = renderFlowAtPoint(editor, result.flow, pos.x, pos.y)
             flowFrameIds.add(id)
             flowSpecMap.set(id, result.flow)
           }
@@ -193,7 +230,12 @@ export default function FlowCanvas() {
     const bounds = editor.getShapePageBounds(btn.frameId)
     if (!bounds) return
     const center = editor.pageToScreen({ x: bounds.x + bounds.w / 2, y: bounds.y + bounds.h / 2 })
-    setConversation([])
+    // Seed conversation with the current flow JSON so the AI knows what it's modifying
+    const existingFlow = flowSpecMap.get(btn.frameId)
+    const seed: ConversationMessage[] = existingFlow
+      ? [{ role: 'assistant', content: JSON.stringify(existingFlow) }]
+      : []
+    setConversation(seed)
     setPromptState({ screenX: center.x, screenY: center.y, mode: 'modify', frameId: btn.frameId })
   }, [])
 

@@ -71,38 +71,84 @@ function collectTemplateVars(flow: FlowSpec): string[] {
 
 // ─── Data rendering ──────────────────────────────────────────────────────────
 
-function DataValue({ value, inline = false }: { value: string; inline?: boolean }) {
-  const [expanded, setExpanded] = useState(false)
+function DataTable({ rows }: { rows: string[][] }) {
+  // rows[0] is header if first element doesn't look like data
+  const hasHeader = rows.length > 1 && rows[0] !== undefined
+  const header = hasHeader ? rows[0]! : null
+  const body = hasHeader ? rows.slice(1) : rows
 
-  let arr: string[] | null = null
+  return (
+    <div className="mt-1 rounded-lg border border-zinc-200 overflow-hidden text-[10px] font-mono">
+      {header && (
+        <div
+          className="grid bg-zinc-100 border-b border-zinc-200 px-2 py-1 gap-2"
+          style={{ gridTemplateColumns: `24px repeat(${header.length}, 1fr)` }}
+        >
+          <span className="text-zinc-300">#</span>
+          {header.map((h, i) => (
+            <span key={i} className="font-semibold text-zinc-500 truncate">{h}</span>
+          ))}
+        </div>
+      )}
+      <div className="max-h-96 overflow-y-auto divide-y divide-zinc-50 bg-white">
+        {body.map((row, i) => (
+          <div
+            key={i}
+            className="grid px-2 py-1 gap-2 hover:bg-zinc-50 transition-colors duration-75"
+            style={{ gridTemplateColumns: `24px repeat(${row.length}, 1fr)` }}
+          >
+            <span className="text-zinc-300 text-right">{i + 1}</span>
+            {row.map((cell, j) => (
+              <span key={j} className="text-zinc-700 truncate" title={cell}>{cell}</span>
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function DataValue({ value, inline = false, defaultExpanded = false }: { value: string; inline?: boolean; defaultExpanded?: boolean }) {
+  // Try to parse as array or 2D array
+  let flat: string[] | null = null
+  let grid: string[][] | null = null
   try {
     const p = JSON.parse(value)
-    if (Array.isArray(p)) arr = p.map(String)
+    if (Array.isArray(p)) {
+      if (p.length > 0 && Array.isArray(p[0])) {
+        grid = (p as unknown[][]).map((row) => (row as unknown[]).map(String))
+      } else {
+        flat = p.map(String)
+      }
+    }
   } catch { /* not JSON */ }
 
-  if (arr !== null) {
-    const preview = arr.slice(0, expanded ? arr.length : 5)
+  const [expanded, setExpanded] = useState(defaultExpanded || (grid !== null && grid.length <= 20) || (flat !== null && flat.length <= 20))
+
+  if (grid !== null) {
     return (
-      <div className={inline ? 'inline-block' : ''}>
+      <div className={inline ? 'inline-block w-full' : 'w-full'}>
         <button
           onClick={() => setExpanded(!expanded)}
-          className="inline-flex items-center gap-1 text-[10px] font-mono bg-violet-50 border border-violet-200 text-violet-700 rounded px-2 py-0.5 hover:bg-violet-100 transition-colors duration-100 cursor-pointer"
+          className="inline-flex items-center gap-1 text-[10px] font-mono bg-violet-50 border border-violet-200 text-violet-700 rounded px-2 py-0.5 hover:bg-violet-100 transition-colors duration-100"
         >
-          [{arr.length} items] {expanded ? '▲' : '▼'}
+          table · {grid.length} rows {expanded ? '▲' : '▼'}
         </button>
-        {expanded && (
-          <div className="mt-1 max-h-40 overflow-y-auto rounded-lg border border-zinc-100 bg-white text-[10px] font-mono divide-y divide-zinc-50">
-            {preview.map((item, i) => (
-              <div key={i} className="flex items-center gap-2 px-2 py-1">
-                <span className="text-zinc-300 w-5 text-right shrink-0">{i + 1}</span>
-                <span className="text-zinc-700 truncate">{item}</span>
-              </div>
-            ))}
-            {!expanded && arr.length > 5 && (
-              <div className="px-2 py-1 text-zinc-400 text-center">+{arr.length - 5} more</div>
-            )}
-          </div>
-        )}
+        {expanded && <DataTable rows={grid} />}
+      </div>
+    )
+  }
+
+  if (flat !== null) {
+    return (
+      <div className={inline ? 'inline-block w-full' : 'w-full'}>
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="inline-flex items-center gap-1 text-[10px] font-mono bg-violet-50 border border-violet-200 text-violet-700 rounded px-2 py-0.5 hover:bg-violet-100 transition-colors duration-100"
+        >
+          {flat.length} rows {expanded ? '▲' : '▼'}
+        </button>
+        {expanded && <DataTable rows={flat.map((v) => [v])} />}
       </div>
     )
   }
@@ -252,9 +298,19 @@ export default function FlowExecutor({ flow, onClose, onModify }: Props) {
   }
 
   const handleApprove = (index: number) => {
-    updateStep(index, { status: 'done', result: { status: 'done', display: 'Approved ✓' } })
-    setRunning(true)
-    void runFrom(index + 1, ctx)
+    const step = steps[index]!
+    // Pure gate steps (action === 'approve') have no execution logic — just mark done and advance.
+    // All other steps with requiresApproval (e.g. send_eth, batch_send) need to actually
+    // execute their plugin code; re-run the same index so runFrom picks up from 'waiting' status
+    // (the requiresApproval guard only fires on 'pending', so it won't re-pause).
+    if (step.node.action === 'approve') {
+      updateStep(index, { status: 'done', result: { status: 'done', display: 'Approved ✓' } })
+      setRunning(true)
+      void runFrom(index + 1, ctx)
+    } else {
+      setRunning(true)
+      void runFrom(index, ctx)
+    }
   }
 
   const hasStarted = steps.some((s) => s.status !== 'pending')
@@ -557,7 +613,7 @@ export default function FlowExecutor({ flow, onClose, onModify }: Props) {
           </button>
 
           {dataStoreOpen && (
-            <div className="px-4 pb-3 space-y-3 max-h-64 overflow-y-auto">
+            <div className="px-4 pb-3 space-y-3 max-h-[32rem] overflow-y-auto">
               {flow.nodes
                 .filter((n) => nodeOutputs[n.id] && Object.keys(nodeOutputs[n.id]!).length > 0)
                 .map((node) => {
