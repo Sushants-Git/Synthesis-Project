@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import type { FlowSpec, FlowNode } from '../ai/flowParser.ts'
 import type { PluginResult, ExecutionContext } from '../plugins/types.ts'
-import { getPlugin } from '../plugins/registry.ts'
+import { getPlugin, substituteVars } from '../plugins/registry.ts'
 import {
   connectWallet,
   getConnectedAccount,
@@ -69,6 +69,29 @@ function buildUpstreamOutputMap(flow: FlowSpec): Map<string, Set<string>> {
   return result
 }
 
+/**
+ * Scan all node params and plugin executeUrls for {{variable}} placeholders.
+ * Returns unique variable names in the order they're first encountered.
+ */
+function collectTemplateVars(flow: FlowSpec): string[] {
+  const seen = new Set<string>()
+  const order: string[] = []
+
+  const push = (str: string) => {
+    for (const [, key] of str.matchAll(/\{\{(\w+)\}\}/g)) {
+      if (!seen.has(key)) { seen.add(key); order.push(key) }
+    }
+  }
+
+  for (const node of flow.nodes) {
+    for (const val of Object.values(node.params ?? {})) push(val)
+    const url = getPlugin(node.plugin)?.executeUrl
+    if (url) push(url)
+  }
+
+  return order
+}
+
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function FlowExecutor({ flow, onClose, onModify }: Props) {
@@ -81,6 +104,10 @@ export default function FlowExecutor({ flow, onClose, onModify }: Props) {
   const [ctx, setCtx] = useState<ExecutionContext>({ resolved: {}, inputs: {} })
 
   const upstreamMap = useMemo(() => buildUpstreamOutputMap(flow), [flow])
+  const templateVarNames = useMemo(() => collectTemplateVars(flow), [flow])
+  const [templateVarValues, setTemplateVarValues] = useState<Record<string, string>>(() =>
+    Object.fromEntries(templateVarNames.map((k) => [k, ''])),
+  )
 
   useEffect(() => {
     getConnectedAccount().then(setWalletAddress)
@@ -127,7 +154,12 @@ export default function FlowExecutor({ flow, onClose, onModify }: Props) {
     }
 
     try {
-      const result = await plugin.execute(node.action, { ...(node.params ?? {}), ...step.inputs }, execCtx)
+      const vars = execCtx.templateVars ?? {}
+      const rawParams = { ...(node.params ?? {}), ...step.inputs }
+      const resolvedParams = Object.fromEntries(
+        Object.entries(rawParams).map(([k, v]) => [k, substituteVars(v, vars)]),
+      )
+      const result = await plugin.execute(node.action, resolvedParams, execCtx)
       if (result.outputs) Object.assign(execCtx.resolved, result.outputs)
 
       if (result.status === 'error') {
@@ -153,6 +185,7 @@ export default function FlowExecutor({ flow, onClose, onModify }: Props) {
       walletAddress: walletAddress ?? undefined,
       resolved: walletAddress ? { wallet_address: walletAddress } : {},
       inputs: {},
+      templateVars: { ...templateVarValues },
     }
     setCtx(execCtx)
     setRunning(true)
@@ -228,6 +261,31 @@ export default function FlowExecutor({ flow, onClose, onModify }: Props) {
         )}
       </div>
 
+      {/* ─ Template variables ─ */}
+      {templateVarNames.length > 0 && (
+        <div className="px-5 py-3 border-b border-zinc-100 shrink-0 space-y-2">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">Variables</span>
+            <span className="text-[9px] text-zinc-400">used as <code className="font-mono bg-zinc-100 px-1 rounded">{'{{name}}'}</code> in this plugin</span>
+          </div>
+          {templateVarNames.map((key) => (
+            <div key={key} className="flex items-center gap-2">
+              <label className="text-[10px] font-mono text-zinc-500 w-28 shrink-0 truncate">{key}</label>
+              <input
+                type={key.toLowerCase().includes('key') || key.toLowerCase().includes('secret') || key.toLowerCase().includes('token') ? 'password' : 'text'}
+                placeholder={`Enter ${key}`}
+                value={templateVarValues[key] ?? ''}
+                onChange={(e) =>
+                  setTemplateVarValues((prev) => ({ ...prev, [key]: e.target.value }))
+                }
+                disabled={hasStarted}
+                className="flex-1 bg-white border border-zinc-200 rounded-lg px-2.5 py-1.5 text-xs font-mono text-zinc-900 placeholder-zinc-300 outline-none focus:border-blue-400 focus:shadow-[0_0_0_3px_rgba(59,130,246,0.08)] transition-[border-color,box-shadow] duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
+              />
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* ─ Steps ─ */}
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
         {steps.map((step, i) => {
@@ -283,13 +341,19 @@ export default function FlowExecutor({ flow, onClose, onModify }: Props) {
                     const isFromUpstream = !paramVal && !userVal && upstreamKeys.has(field.key)
                     const needsManual = !paramVal && !userVal && !isFromUpstream
 
-                    // Pre-filled by AI
+                    // Pre-filled by AI (possibly containing {{vars}})
                     if (paramVal) {
+                      const resolved = substituteVars(paramVal, templateVarValues)
+                      const hasVar = /\{\{/.test(paramVal)
                       return (
                         <div key={field.key} className="flex items-center gap-2">
                           <span className="text-[10px] text-zinc-400 w-24 shrink-0 truncate">{field.label ?? field.key}</span>
-                          <span className="text-[10px] font-mono bg-zinc-100 border border-zinc-200 text-zinc-700 rounded px-2 py-0.5 truncate max-w-[140px]">
-                            {paramVal}
+                          <span className={`text-[10px] font-mono border rounded px-2 py-0.5 truncate max-w-[160px] ${
+                            hasVar && resolved !== paramVal
+                              ? 'bg-blue-50 border-blue-200 text-blue-700'
+                              : 'bg-zinc-100 border-zinc-200 text-zinc-700'
+                          }`}>
+                            {resolved}
                           </span>
                         </div>
                       )

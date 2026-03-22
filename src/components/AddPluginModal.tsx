@@ -18,7 +18,7 @@ const TEMPLATE_GOOGLE_SHEETS: PluginManifest = {
     'Fetch a list of wallet addresses from a Google Sheets column. Outputs a JSON array of addresses under the key "wallets" so downstream nodes like metamask:batch_send can iterate over them.',
   icon: '📊',
   color: 'green',
-  executeUrl: 'https://your-worker.workers.dev',
+  executeUrl: 'https://your-worker.workers.dev?key={{api_key}}',
   capabilities: [
     {
       action: 'fetch_wallets',
@@ -452,6 +452,10 @@ export default function AddPluginModal({ onAdd, onClose, initialManifest }: Prop
                 <div className="flex items-start gap-2">
                   <span className="text-blue-400 shrink-0 mt-[1px]">4</span>
                   <span>Your server must include <code className="bg-white border border-zinc-200 rounded px-1 text-[10px] font-mono text-zinc-700">Access-Control-Allow-Origin: *</code> in every response</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="text-amber-400 shrink-0 mt-[1px]">✦</span>
+                  <span>Use <code className="bg-white border border-zinc-200 rounded px-1 text-[10px] font-mono text-zinc-700">{'{{variable_name}}'}</code> anywhere in <code className="bg-white border border-zinc-200 rounded px-1 text-[10px] font-mono text-zinc-700">executeUrl</code> or param values — they become input fields at the top of the executor</span>
                 </div>
               </div>
             </div>

@@ -37,6 +37,7 @@ export function loadPluginManifest(manifest: PluginManifest): Plugin {
     icon: manifest.icon,
     color: manifest.color,
     prizeTrack: manifest.prizeTrack,
+    executeUrl: manifest.executeUrl,
     capabilities: manifest.capabilities,
 
     async execute(action: string, params: Record<string, string>, ctx: ExecutionContext): Promise<PluginResult> {
@@ -44,14 +45,21 @@ export function loadPluginManifest(manifest: PluginManifest): Plugin {
         return { status: 'done', display: `[${manifest.name}] visual-only — no executeUrl configured` }
       }
 
+      // Substitute {{variable}} placeholders in the URL and in every param value
+      const vars = ctx.templateVars ?? {}
+      const url = substituteVars(manifest.executeUrl, vars)
+      const resolvedParams = Object.fromEntries(
+        Object.entries(params).map(([k, v]) => [k, substituteVars(v, vars)]),
+      )
+
       try {
         const controller = new AbortController()
         const timeout = setTimeout(() => controller.abort(), 15_000)
 
-        const resp = await fetch(manifest.executeUrl, {
+        const resp = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action, params, context: ctx }),
+          body: JSON.stringify({ action, params: resolvedParams, context: ctx }),
           signal: controller.signal,
         })
         clearTimeout(timeout)
@@ -122,6 +130,14 @@ export function createPlugin(
     execute: async (_action, _params, _ctx) => ({ status: 'done', display: 'Done' }),
     ...def,
   }
+}
+
+/**
+ * Replace all {{variable}} placeholders in a string with values from the map.
+ * Unmatched placeholders are left as-is so missing vars are obvious.
+ */
+export function substituteVars(str: string, vars: Record<string, string>): string {
+  return str.replace(/\{\{(\w+)\}\}/g, (_, key: string) => vars[key] ?? `{{${key}}}`)
 }
 
 /** Build the plugin descriptions block injected into the AI system prompt */

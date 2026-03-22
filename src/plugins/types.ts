@@ -24,6 +24,11 @@ export interface ExecutionContext {
   resolved: Record<string, string>
   /** User-entered inputs for this run */
   inputs: Record<string, string>
+  /**
+   * Template variable values filled in by the user before execution.
+   * Substituted into {{variable}} placeholders in executeUrl and params.
+   */
+  templateVars?: Record<string, string>
 }
 
 export interface PluginResult {
@@ -46,6 +51,11 @@ export interface Plugin {
   color: string
   /** Prize track this plugin targets */
   prizeTrack?: string
+  /**
+   * For manifest-based plugins: the executeUrl (may contain {{variable}} placeholders).
+   * Exposed so the executor can scan it for template variables.
+   */
+  executeUrl?: string
   capabilities: PluginCapability[]
   execute(
     action: string,
