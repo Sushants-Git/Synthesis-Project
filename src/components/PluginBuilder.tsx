@@ -112,7 +112,6 @@ function JsonNode({
 
 // ── Step Editor ───────────────────────────────────────────────────────────────
 
-const COLORS = ['blue', 'orange', 'green', 'red', 'violet', 'yellow']
 const ICONS = ['🔌', '🌐', '📡', '🔗', '⚡', '🛰', '🔧', '📊', '💡', '🔑', '🧩', '🚀']
 
 function StepEditor({
@@ -312,10 +311,18 @@ function StepEditor({
       {/* Available vars hint */}
       {availableVars.length > 0 && (
         <div className="px-4 pb-2 shrink-0">
-          <div className="text-[9px] text-zinc-400 mb-1">Available variables (use as {'{{name}}'})</div>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-[9px] text-zinc-400 uppercase tracking-widest font-semibold">Available inputs</span>
+            <span className="text-[9px] text-zinc-300">from plugin inputs + previous steps</span>
+          </div>
           <div className="flex flex-wrap gap-1">
             {availableVars.map((v) => (
-              <code key={v} className="text-[9px] bg-blue-50 text-blue-600 border border-blue-100 rounded px-1 leading-4">
+              <code
+                key={v}
+                className="text-[9px] font-mono bg-amber-50 text-amber-700 border border-amber-200 rounded px-1.5 leading-5 cursor-pointer hover:bg-amber-100 transition-colors"
+                title={`Click to copy {{${v}}}`}
+                onClick={() => navigator.clipboard.writeText(`{{${v}}}`)}
+              >
                 {`{{${v}}}`}
               </code>
             ))}
@@ -625,11 +632,20 @@ function makeStep(): ApiStepDef {
   }
 }
 
+function extractVarsUsed(step: ApiStepDef): string[] {
+  const matches = new Set<string>()
+  const scan = (s: string) => { for (const m of s.matchAll(/\{\{(\w+)\}\}/g)) matches.add(m[1]) }
+  scan(step.url)
+  scan(step.body ?? '')
+  for (const h of step.headers) { scan(h.key); scan(h.value) }
+  return [...matches]
+}
+
 export default function PluginBuilder({ initial, onSave, onClose }: Props) {
   const [name, setName] = useState(initial?.name ?? '')
   const [description, setDescription] = useState(initial?.description ?? '')
   const [icon, setIcon] = useState(initial?.icon ?? '🔌')
-  const [color, setColor] = useState(initial?.color ?? 'blue')
+  const [color, setColor] = useState(initial?.color ?? 'blue'); void setColor
   const [steps, setSteps] = useState<ApiStepDef[]>(initial?.steps ?? [makeStep()])
   const [inputs, setInputs] = useState<SoftPluginInput[]>(initial?.inputs ?? [])
   const [selectedStepId, setSelectedStepId] = useState<string | null>(steps[0]?.id ?? null)
@@ -743,25 +759,7 @@ export default function PluginBuilder({ initial, onSave, onClose }: Props) {
               />
             </div>
 
-            {/* Color */}
-            <div className="flex gap-1">
-              {COLORS.map((c) => (
-                <button
-                  key={c}
-                  onClick={() => setColor(c)}
-                  className={`w-4 h-4 rounded-full border-2 transition-[border-color] ${
-                    color === c ? 'border-zinc-600' : 'border-transparent'
-                  }`}
-                  style={{ backgroundColor: `var(--color-${c}-500, #6b7280)` }}
-                  title={c}
-                />
-              ))}
-            </div>
-
             <div className="flex items-center gap-2">
-              <span className="text-[10px] text-zinc-400 bg-blue-50 border border-blue-100 text-blue-500 rounded-full px-2 leading-5">
-                Soft Plugin
-              </span>
               <button
                 onClick={onClose}
                 className="text-zinc-400 hover:text-zinc-600 transition-colors text-sm leading-none active:scale-[0.9]"
@@ -780,43 +778,84 @@ export default function PluginBuilder({ initial, onSave, onClose }: Props) {
                 <div className="text-[9px] text-zinc-400 uppercase tracking-widest font-medium mb-2">
                   API Steps
                 </div>
-                <div className="space-y-0.5">
-                  {steps.map((s, i) => (
-                    <div key={s.id} className="group flex items-center gap-1">
-                      <button
-                        onClick={() => setSelectedStepId(s.id)}
-                        className={`flex-1 flex items-center gap-2 px-2 py-2 rounded-lg text-left transition-[background-color] duration-100 ${
-                          selectedStepId === s.id
-                            ? 'bg-blue-50 text-blue-700'
-                            : 'hover:bg-zinc-50 text-zinc-600'
-                        }`}
-                      >
-                        <span className="text-[10px] text-zinc-400 shrink-0 font-mono w-4">{i + 1}</span>
-                        <span className="text-[11px] font-medium truncate">{s.name || 'Unnamed'}</span>
-                        {s.outputMappings.length > 0 && (
-                          <span className="text-[8px] text-emerald-500 bg-emerald-50 rounded-full px-1 leading-4 shrink-0">
-                            {s.outputMappings.length}
-                          </span>
+                <div className="space-y-0">
+                  {steps.map((s, i) => {
+                    const varsUsed = extractVarsUsed(s)
+                    const outputs = s.outputMappings.map((m) => m.key)
+                    const isSelected = selectedStepId === s.id
+                    return (
+                      <div key={s.id}>
+                        {/* Step card */}
+                        <div className={`group rounded-xl border transition-[background-color,border-color] duration-100 overflow-hidden ${
+                          isSelected ? 'border-blue-200 bg-blue-50' : 'border-zinc-100 bg-white hover:border-zinc-200'
+                        }`}>
+                          <button
+                            onClick={() => setSelectedStepId(s.id)}
+                            className="w-full text-left px-3 py-2.5"
+                          >
+                            <div className="flex items-center gap-2 mb-1.5">
+                              <span className={`text-[9px] font-mono font-bold shrink-0 w-4 ${isSelected ? 'text-blue-500' : 'text-zinc-400'}`}>{i + 1}</span>
+                              <span className={`text-[11px] font-semibold truncate flex-1 ${isSelected ? 'text-blue-800' : 'text-zinc-700'}`}>{s.name || 'Unnamed step'}</span>
+                              {steps.length > 1 && (
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); removeStep(s.id) }}
+                                  className="opacity-0 group-hover:opacity-100 text-zinc-300 hover:text-red-400 text-xs transition-[opacity,color] shrink-0 leading-none"
+                                >
+                                  ×
+                                </button>
+                              )}
+                            </div>
+
+                            {/* Inputs row */}
+                            <div className="flex items-start gap-1.5 mb-1">
+                              <span className="text-[8px] text-zinc-400 uppercase tracking-wide font-semibold shrink-0 mt-0.5 w-6">IN</span>
+                              {varsUsed.length > 0 ? (
+                                <div className="flex flex-wrap gap-0.5">
+                                  {varsUsed.map((v) => (
+                                    <span key={v} className="text-[9px] font-mono bg-amber-50 border border-amber-200 text-amber-700 rounded px-1 leading-4">{`{{${v}}}`}</span>
+                                  ))}
+                                </div>
+                              ) : (
+                                <span className="text-[9px] text-zinc-300 italic">none</span>
+                              )}
+                            </div>
+
+                            {/* Outputs row */}
+                            <div className="flex items-start gap-1.5">
+                              <span className="text-[8px] text-emerald-600 uppercase tracking-wide font-semibold shrink-0 mt-0.5 w-6">OUT</span>
+                              {outputs.length > 0 ? (
+                                <div className="flex flex-wrap gap-0.5">
+                                  {outputs.map((k) => (
+                                    <span key={k} className="text-[9px] font-mono bg-emerald-50 border border-emerald-200 text-emerald-700 rounded px-1 leading-4">{k}</span>
+                                  ))}
+                                </div>
+                              ) : (
+                                <span className="text-[9px] text-zinc-300 italic">not mapped</span>
+                              )}
+                            </div>
+                          </button>
+                        </div>
+
+                        {/* Connector arrow between steps */}
+                        {i < steps.length - 1 && (
+                          <div className="flex flex-col items-center py-1">
+                            <div className="w-px h-3 bg-zinc-200" />
+                            <svg width="8" height="5" viewBox="0 0 8 5" fill="none">
+                              <path d="M1 1L4 4L7 1" stroke="#d4d4d8" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                            </svg>
+                          </div>
                         )}
-                      </button>
-                      {steps.length > 1 && (
-                        <button
-                          onClick={() => removeStep(s.id)}
-                          className="opacity-0 group-hover:opacity-100 text-zinc-300 hover:text-red-400 text-xs transition-[opacity,color] shrink-0 px-1"
-                        >
-                          ×
-                        </button>
-                      )}
-                    </div>
-                  ))}
+                      </div>
+                    )
+                  })}
+                  <button
+                    onClick={addStep}
+                    className="mt-2 w-full flex items-center justify-center gap-1.5 border border-dashed border-zinc-200 hover:border-blue-400 hover:bg-blue-50/60 rounded-xl py-2.5 text-[10px] text-zinc-400 hover:text-blue-600 transition-[color,border-color,background-color] duration-150"
+                  >
+                    <span className="text-sm leading-none">+</span>
+                    <span>Add step</span>
+                  </button>
                 </div>
-                <button
-                  onClick={addStep}
-                  className="mt-2 w-full flex items-center justify-center gap-1.5 border border-dashed border-zinc-300 hover:border-blue-400 hover:bg-blue-50/60 rounded-lg py-2 text-[10px] text-zinc-400 hover:text-blue-600 transition-[color,border-color,background-color] duration-150"
-                >
-                  <span>+</span>
-                  <span>Add step</span>
-                </button>
               </div>
 
               {/* Separator */}
