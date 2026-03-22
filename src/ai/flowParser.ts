@@ -10,15 +10,11 @@ export interface InputField {
 
 export interface FlowNode {
   id: string
-  /** Which plugin handles this node. Use "system" for generic flow control. */
   plugin: string
-  /** Which action of that plugin to call */
   action: string
   label: string
   description: string
-  /** Values extracted directly from the user's prompt */
   params?: Record<string, string>
-  /** Fields the user must fill in — only what's genuinely missing from the prompt */
   requiredInputs?: InputField[]
 }
 
@@ -35,8 +31,20 @@ export interface FlowSpec {
   edges: FlowEdge[]
 }
 
+export interface ConversationMessage {
+  role: 'user' | 'assistant'
+  content: string
+}
+
+export type ParseResult =
+  | { type: 'flow'; flow: FlowSpec }
+  | { type: 'message'; content: string }
+
 function buildSystemPrompt(): string {
   return `You are FlowTx — a visual blockchain transaction composer. Given a natural language intent, compose a step-by-step flow using the available plugins.
+
+If the user's intent is clear enough to build a flow, respond ONLY with valid JSON (no markdown, no explanation).
+If the intent is ambiguous or you need clarification, ask a SHORT follow-up question as plain text (no JSON). Keep clarifying questions to one sentence.
 
 AVAILABLE PLUGINS:
 ${buildPluginContext()}
@@ -46,7 +54,7 @@ SYSTEM NODES (plugin: "system"):
 - action: "filter" — filter or rank a list of results
 - action: "note" — display information to the user
 
-OUTPUT FORMAT — return ONLY valid JSON, no markdown, no explanation:
+OUTPUT FORMAT (when intent is clear) — return ONLY valid JSON:
 {
   "title": "Short title (3-5 words)",
   "description": "One sentence what this flow does",
@@ -69,7 +77,7 @@ OUTPUT FORMAT — return ONLY valid JSON, no markdown, no explanation:
 }
 
 COMPOSITION RULES:
-1. Extract ALL values from the user's prompt into "params" (amounts, names, addresses, criteria). "requiredInputs" is only for genuinely missing values.
+1. Extract ALL values from the user's prompt into "params". "requiredInputs" is only for genuinely missing values.
 2. If the recipient is an ENS name, always include an ens:resolve_name node before metamask:send_eth.
 3. Always include metamask:approve before any fund movement (send_eth, deploy_contract, send_gasless_tx).
 4. Always end with system:output.
@@ -88,15 +96,22 @@ function extractJSON(text: string): string {
   return text.trim()
 }
 
-export async function parseIntent(prompt: string): Promise<FlowSpec> {
+/**
+ * Parse a multi-turn conversation into either a FlowSpec or a clarifying message.
+ * Pass the full conversation history so the AI has context for follow-ups.
+ */
+export async function parseIntent(conversation: ConversationMessage[]): Promise<ParseResult> {
   const response = await chat(
-    [{ role: 'user', content: prompt }],
+    conversation.map((m) => ({ role: m.role, content: m.content })),
     buildSystemPrompt(),
   )
 
   try {
-    return JSON.parse(extractJSON(response.content)) as FlowSpec
+    const flow = JSON.parse(extractJSON(response.content)) as FlowSpec
+    // Sanity-check it looks like a FlowSpec before returning
+    if (!flow.nodes || !Array.isArray(flow.nodes)) throw new Error('not a FlowSpec')
+    return { type: 'flow', flow }
   } catch {
-    throw new Error(`Failed to parse AI response as FlowSpec:\n${response.content}`)
+    return { type: 'message', content: response.content }
   }
 }

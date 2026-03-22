@@ -4,7 +4,7 @@ import { useCallback, useRef, useState } from 'react'
 import FloatingPrompt from '../components/FloatingPrompt.tsx'
 import FlowExecutor from '../components/FlowExecutor.tsx'
 import PluginSidebar from '../components/PluginSidebar.tsx'
-import { parseIntent, type FlowSpec } from '../ai/flowParser.ts'
+import { parseIntent, type FlowSpec, type ConversationMessage } from '../ai/flowParser.ts'
 import { renderFlowIntoFrame, renderFlowAtPoint } from './renderFlow.ts'
 import { FlowNodeShapeUtil } from './FlowNodeShape.tsx'
 import { EXAMPLE_FLOW } from './exampleFlow.ts'
@@ -18,7 +18,6 @@ interface PromptState {
   pageY?: number
 }
 
-/** Position (screen coords) of action buttons for a flow frame */
 interface FrameButtonPos {
   frameId: TLShapeId
   screenX: number
@@ -31,7 +30,6 @@ const flowFrameIds = new Set<string>()
 const SIDEBAR_W = 224
 const SHAPE_UTILS = [FlowNodeShapeUtil]
 
-/** Re-compute screen positions of all tracked flow frames */
 function recomputeFramePositions(editor: Editor): FrameButtonPos[] {
   const out: FrameButtonPos[] = []
   for (const id of flowFrameIds) {
@@ -47,15 +45,19 @@ export default function FlowCanvas() {
   const editorRef = useRef<Editor | null>(null)
   const [promptState, setPromptState] = useState<PromptState | null>(null)
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  /** Persistent button positions — one entry per flow frame, always visible */
   const [frameButtons, setFrameButtons] = useState<FrameButtonPos[]>([])
   const [executingFlow, setExecutingFlow] = useState<FlowSpec | null>(null)
+  /** Conversation history for the current floating prompt session */
+  const [conversation, setConversation] = useState<ConversationMessage[]>([])
+
+  const closePrompt = useCallback(() => {
+    setPromptState(null)
+    setConversation([])
+  }, [])
 
   const handleMount = useCallback((editor: Editor) => {
     editorRef.current = editor
 
-    // Render example flow centred in the initial viewport
     const vp = editor.getViewportScreenBounds()
     const cx = SIDEBAR_W + (vp.w - SIDEBAR_W) / 2
     const cy = vp.h / 2
@@ -70,20 +72,15 @@ export default function FlowCanvas() {
       pagePos.x - approxFrameW / 2,
       pagePos.y - approxFrameH / 2,
     )
-    // Register before the listener is attached so it's never mistaken for a user frame
     flowFrameIds.add(exampleId)
     flowSpecMap.set(exampleId, EXAMPLE_FLOW)
-
-    // Initial button positions (after the example flow is on canvas)
     setFrameButtons(recomputeFramePositions(editor))
 
     editor.store.listen((entry) => {
-      // Only open the prompt for frames the USER draws (not programmatic renders)
       if (entry.source === 'user') {
         for (const record of Object.values(entry.changes.added)) {
           if (record.typeName === 'shape' && (record as { type: string }).type === 'frame') {
             const id = (record as { id: TLShapeId }).id
-            // Skip frames we already know about (e.g. example flow)
             if (flowFrameIds.has(id)) continue
             const bounds = editor.getShapePageBounds(id)
             if (!bounds) continue
@@ -93,8 +90,6 @@ export default function FlowCanvas() {
           }
         }
       }
-
-      // Always recompute button positions (handles pan, zoom, shape moves)
       setFrameButtons(recomputeFramePositions(editor))
     })
   }, [])
@@ -102,6 +97,7 @@ export default function FlowCanvas() {
   const openPromptAt = useCallback((screenX: number, screenY: number, pagePos?: { x: number; y: number }) => {
     const editor = editorRef.current
     const pos = pagePos ?? (editor ? editor.screenToPage({ x: screenX, y: screenY }) : { x: 0, y: 0 })
+    setConversation([])
     setPromptState({ screenX, screenY, mode: 'create', pageX: pos.x, pageY: pos.y })
   }, [])
 
@@ -125,37 +121,60 @@ export default function FlowCanvas() {
     const cx = SIDEBAR_W + (vp.w - SIDEBAR_W) / 2
     const cy = vp.h / 2
     const pagePos = editor.screenToPage({ x: cx, y: cy })
+    setConversation([])
     setPromptState({ screenX: cx, screenY: cy, mode: 'create', pageX: pagePos.x, pageY: pagePos.y })
     pendingAutoPromptRef.current = prompt
   }, [])
   const pendingAutoPromptRef = useRef<string | null>(null)
 
   const handleSubmit = useCallback(
-    async (prompt: string) => {
+    async (userMessage: string) => {
       if (!editorRef.current || !promptState) return
+
+      // Append user message to conversation
+      const updatedConversation: ConversationMessage[] = [
+        ...conversation,
+        { role: 'user', content: userMessage },
+      ]
+      setConversation(updatedConversation)
       setLoading(true)
-      setError(null)
+
       try {
-        const flow = await parseIntent(prompt)
-        const editor = editorRef.current
-        if (promptState.frameId) {
-          renderFlowIntoFrame(editor, flow, promptState.frameId)
-          flowFrameIds.add(promptState.frameId)
-          flowSpecMap.set(promptState.frameId, flow)
-        } else if (promptState.pageX !== undefined && promptState.pageY !== undefined) {
-          const id = renderFlowAtPoint(editor, flow, promptState.pageX, promptState.pageY)
-          flowFrameIds.add(id)
-          flowSpecMap.set(id, flow)
+        const result = await parseIntent(updatedConversation)
+
+        if (result.type === 'message') {
+          // AI needs clarification — show its reply in the thread, keep prompt open
+          setConversation([
+            ...updatedConversation,
+            { role: 'assistant', content: result.content },
+          ])
+        } else {
+          // Got a valid flow — render it and close the prompt
+          const editor = editorRef.current
+          if (promptState.frameId) {
+            renderFlowIntoFrame(editor, result.flow, promptState.frameId)
+            flowFrameIds.add(promptState.frameId)
+            flowSpecMap.set(promptState.frameId, result.flow)
+          } else if (promptState.pageX !== undefined && promptState.pageY !== undefined) {
+            const id = renderFlowAtPoint(editor, result.flow, promptState.pageX, promptState.pageY)
+            flowFrameIds.add(id)
+            flowSpecMap.set(id, result.flow)
+          }
+          setConversation([])
+          setPromptState(null)
+          setFrameButtons(recomputeFramePositions(editor))
         }
-        setPromptState(null)
-        setFrameButtons(recomputeFramePositions(editor))
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Something went wrong')
+        // Unexpected error — show inline in the thread
+        setConversation([
+          ...updatedConversation,
+          { role: 'assistant', content: `Something went wrong: ${err instanceof Error ? err.message : String(err)}` },
+        ])
       } finally {
         setLoading(false)
       }
     },
-    [promptState],
+    [promptState, conversation],
   )
 
   const openModify = useCallback((btn: FrameButtonPos) => {
@@ -164,6 +183,7 @@ export default function FlowCanvas() {
     const bounds = editor.getShapePageBounds(btn.frameId)
     if (!bounds) return
     const center = editor.pageToScreen({ x: bounds.x + bounds.w / 2, y: bounds.y + bounds.h / 2 })
+    setConversation([])
     setPromptState({ screenX: center.x, screenY: center.y, mode: 'modify', frameId: btn.frameId })
   }, [])
 
@@ -183,15 +203,7 @@ export default function FlowCanvas() {
       >
         <Tldraw onMount={handleMount} shapeUtils={SHAPE_UTILS} />
 
-        {/* Error toast */}
-        {error && (
-          <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-2 rounded-lg shadow-lg max-w-md text-center">
-            {error}
-            <button className="ml-3 text-red-400 hover:text-red-600" onClick={() => setError(null)}>✕</button>
-          </div>
-        )}
-
-        {/* Persistent Execute / Modify buttons — one set per flow frame */}
+        {/* Persistent Execute / Modify buttons */}
         {!promptState && !executingFlow && frameButtons.map((btn) => (
           <div
             key={btn.frameId}
@@ -216,13 +228,14 @@ export default function FlowCanvas() {
           </div>
         ))}
 
-        {/* Floating prompt */}
+        {/* Floating prompt with conversation thread */}
         {promptState && (
           <FloatingPrompt
             screenX={promptState.screenX}
             screenY={promptState.screenY}
             mode={promptState.mode}
             loading={loading}
+            messages={conversation}
             initialValue={pendingAutoPromptRef.current ?? ''}
             onSubmit={(prompt) => {
               pendingAutoPromptRef.current = null
@@ -230,17 +243,15 @@ export default function FlowCanvas() {
             }}
             onClose={() => {
               pendingAutoPromptRef.current = null
-              setPromptState(null)
-              if (promptState.frameId && !loading) {
-                const editor = editorRef.current
-                if (editor) {
-                  const children = editor.getSortedChildIdsForParent(promptState.frameId)
-                  if (children.length === 0) {
-                    editor.deleteShapes([promptState.frameId])
-                    flowFrameIds.delete(promptState.frameId)
-                  }
+              const editor = editorRef.current
+              if (editor && promptState.frameId && !loading) {
+                const children = editor.getSortedChildIdsForParent(promptState.frameId)
+                if (children.length === 0) {
+                  editor.deleteShapes([promptState.frameId])
+                  flowFrameIds.delete(promptState.frameId)
                 }
               }
+              closePrompt()
             }}
           />
         )}
