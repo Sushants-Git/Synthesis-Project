@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ConversationMessage, FlowSpec } from '../ai/flowParser.ts'
 import { getPluginList, type Plugin } from '../plugins/registry.ts'
+import PluginIcon from './PluginIcon.tsx'
 
 /** Render a message bubble — collapses raw FlowSpec JSON into a summary pill. */
 function MessageBubble({ m }: { m: ConversationMessage }) {
@@ -265,7 +266,7 @@ export default function FloatingPrompt({
                         i === mention.selected ? 'bg-blue-50' : 'hover:bg-zinc-50'
                       }`}
                     >
-                      <span className="text-base shrink-0 leading-none">{p.icon}</span>
+                      <PluginIcon icon={p.icon} size={16} />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5">
                           <span className="text-xs font-medium text-zinc-800">{p.name}</span>

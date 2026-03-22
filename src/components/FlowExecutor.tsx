@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
+import PluginIcon from './PluginIcon.tsx'
 import type { FlowSpec, FlowNode } from '../ai/flowParser.ts'
 import type { PluginResult, ExecutionContext } from '../plugins/types.ts'
 import { getPlugin, substituteVars, loadVarDefaults } from '../plugins/registry.ts'
@@ -376,7 +377,7 @@ export default function FlowExecutor({ flow, onClose, onModify }: Props) {
             if (!p) return null
             return (
               <span key={pid} className="inline-flex items-center gap-1 px-2 py-0.5 bg-zinc-100 border border-zinc-200 rounded-full text-[10px] text-zinc-600 font-medium">
-                {p.icon} {p.name}
+                <PluginIcon icon={p.icon} size={12} /> {p.name}
               </span>
             )
           })}
@@ -452,7 +453,7 @@ export default function FlowExecutor({ flow, onClose, onModify }: Props) {
             >
               {/* Step header */}
               <div className="flex items-start gap-2 px-3 pt-3 pb-2">
-                <span className="text-base shrink-0 mt-0.5 leading-none">{plugin?.icon ?? '▸'}</span>
+                {plugin ? <PluginIcon icon={plugin.icon} size={16} /> : <span className="shrink-0 leading-none text-base">▸</span>}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-medium text-zinc-800 truncate">{node.label}</span>
@@ -655,7 +656,7 @@ export default function FlowExecutor({ flow, onClose, onModify }: Props) {
                   return (
                     <div key={node.id}>
                       <div className="flex items-center gap-1.5 mb-1.5">
-                        <span className="text-sm">{plugin?.icon ?? '▸'}</span>
+                        {plugin ? <PluginIcon icon={plugin.icon} size={14} /> : <span className="text-sm">▸</span>}
                         <span className="text-[10px] font-semibold text-zinc-700">{node.label}</span>
                       </div>
                       <div className="space-y-1.5 pl-5">

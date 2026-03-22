@@ -10,7 +10,7 @@ export const StatusNetworkPlugin: Plugin = {
   description: 'Gasless transactions and smart contract deployment on Status Network Sepolia',
   aiDescription:
     'Status Network plugin — a Layer 2 where gas is free (gasPrice=0). Actions: send_gasless_tx (send a transaction on Status Network Sepolia with no gas cost — great for micropayments and agent-triggered actions), deploy_contract (deploy a smart contract to Status Network Sepolia testnet with gasless execution). Use this for any action that should be gas-free.',
-  icon: '🟢',
+  icon: 'https://status.network/logo.svg',
   color: 'green',
   prizeTrack: 'Status Network Go Gasless ($50 qualifying)',
   capabilities: [

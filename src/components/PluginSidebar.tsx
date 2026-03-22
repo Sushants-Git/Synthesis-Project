@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import PluginIcon from './PluginIcon.tsx'
 import {
   getPluginList,
   registerSoftPlugin,
@@ -66,7 +67,7 @@ function PluginRow({
         onClick={onToggle}
         className="w-full flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-zinc-100 transition-[background-color] duration-150 text-left group active:scale-[0.98]"
       >
-        <span className="text-base shrink-0 leading-none">{plugin.icon}</span>
+        <PluginIcon icon={plugin.icon} size={16} />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1">
             <div className="text-xs font-medium text-zinc-700 group-hover:text-zinc-900 truncate transition-colors duration-150">

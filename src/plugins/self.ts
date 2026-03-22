@@ -6,7 +6,7 @@ export const SelfPlugin: Plugin = {
   description: 'On-chain identity verification via Self Pass and Self Agent ID',
   aiDescription:
     'Self Protocol — privacy-preserving identity verification. Actions: verify_identity (verify a user holds a valid Self Pass — proves they are a real human without revealing personal data, use this as an identity gate before sending funds to strangers), check_credentials (check specific credential claims like age, country, or humanity score). Make this essential to the flow, not decorative.',
-  icon: '🪪',
+  icon: 'https://docs.self.xyz/~gitbook/image?url=https%3A%2F%2F558968968-files.gitbook.io%2F%7E%2Ffiles%2Fv0%2Fb%2Fgitbook-x-prod.appspot.com%2Fo%2Forganizations%252FN7JVIot3pWv4ZY6bRRrw%252Fsites%252Fsite_WgLhj%252Ficon%252FANI7wUW00mwXyWKSVz2c%252FSelf%2520App%2520Icon.png%3Falt%3Dmedia%26token%3D3f8725c5-5d2c-4a3e-8b58-8b50c0835ef6&width=32&dpr=2&quality=100&sign=34638d37&sv=2',
   color: 'violet',
   prizeTrack: 'Self Protocol Best Integration ($1,000)',
   capabilities: [
