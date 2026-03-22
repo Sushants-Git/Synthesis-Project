@@ -161,6 +161,30 @@ function DataValue({ value, inline = false, defaultExpanded = false }: { value: 
   )
 }
 
+// ─── Copy button ─────────────────────────────────────────────────────────────
+
+function CopyButton({ value }: { value: string }) {
+  const [copied, setCopied] = useState(false)
+  const copy = () => {
+    void navigator.clipboard.writeText(value)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1500)
+  }
+  return (
+    <button
+      onClick={copy}
+      title="Copy"
+      className="opacity-0 group-hover:opacity-100 shrink-0 text-zinc-400 hover:text-zinc-600 transition-[opacity,color] duration-100 active:scale-90"
+    >
+      {copied ? (
+        <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+      ) : (
+        <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><rect x="4" y="1" width="7" height="8" rx="1.2" stroke="currentColor" strokeWidth="1.2"/><rect x="1" y="3.5" width="7" height="8" rx="1.2" stroke="currentColor" strokeWidth="1.2" fill="white"/></svg>
+      )}
+    </button>
+  )
+}
+
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function FlowExecutor({ flow, onClose, onModify }: Props) {
@@ -465,15 +489,16 @@ export default function FlowExecutor({ flow, onClose, onModify }: Props) {
                       const resolved = substituteVars(paramVal, templateVarValues)
                       const hasVar = /\{\{/.test(paramVal)
                       return (
-                        <div key={field.key} className="flex items-center gap-2">
+                        <div key={field.key} className="group flex items-center gap-2">
                           <span className="text-[10px] text-zinc-400 w-24 shrink-0 truncate">{field.label ?? field.key}</span>
-                          <span className={`text-[10px] font-mono border rounded px-2 py-0.5 truncate max-w-[160px] ${
+                          <span className={`text-[10px] font-mono border rounded px-2 py-0.5 truncate max-w-[140px] ${
                             hasVar && resolved !== paramVal
                               ? 'bg-blue-50 border-blue-200 text-blue-700'
                               : 'bg-zinc-100 border-zinc-200 text-zinc-700'
                           }`}>
                             {resolved}
                           </span>
+                          <CopyButton value={resolved} />
                         </div>
                       )
                     }
@@ -481,10 +506,13 @@ export default function FlowExecutor({ flow, onClose, onModify }: Props) {
                     // From upstream (show actual value if available, otherwise "auto" tag)
                     if (isFromUpstream) {
                       return (
-                        <div key={field.key} className="flex items-center gap-2">
+                        <div key={field.key} className="group flex items-center gap-2">
                           <span className="text-[10px] text-zinc-400 w-24 shrink-0 truncate">{field.label ?? field.key}</span>
                           {actualUpstreamVal ? (
-                            <DataValue value={actualUpstreamVal} inline />
+                            <>
+                              <DataValue value={actualUpstreamVal} inline />
+                              <CopyButton value={actualUpstreamVal} />
+                            </>
                           ) : (
                             <span className="text-[10px] text-amber-600 bg-amber-50 border border-amber-200 rounded px-2 py-0.5 italic">
                               auto · from upstream ↑
@@ -497,11 +525,12 @@ export default function FlowExecutor({ flow, onClose, onModify }: Props) {
                     // User-entered value — show badge only after step has run; input field handles pending/waiting
                     if (userVal && step.status !== 'pending' && step.status !== 'waiting') {
                       return (
-                        <div key={field.key} className="flex items-center gap-2">
+                        <div key={field.key} className="group flex items-center gap-2">
                           <span className="text-[10px] text-zinc-400 w-24 shrink-0 truncate">{field.label ?? field.key}</span>
                           <span className="text-[10px] font-mono bg-blue-50 border border-blue-200 text-blue-700 rounded px-2 py-0.5 truncate max-w-[140px]">
                             {userVal}
                           </span>
+                          <CopyButton value={userVal} />
                         </div>
                       )
                     }
@@ -537,10 +566,13 @@ export default function FlowExecutor({ flow, onClose, onModify }: Props) {
                   {outputKeys.map((key) => {
                     const val = step.result?.outputs?.[key]
                     return (
-                      <div key={key} className="flex items-start gap-2">
+                      <div key={key} className="group flex items-start gap-2">
                         <span className="text-[10px] font-mono text-zinc-400 w-24 shrink-0 truncate pt-0.5">{key}</span>
                         {val ? (
-                          <DataValue value={val} />
+                          <>
+                            <div className="flex-1 min-w-0"><DataValue value={val} /></div>
+                            <CopyButton value={val} />
+                          </>
                         ) : (
                           step.status === 'running'
                             ? <span className="text-[10px] text-zinc-300 italic">…</span>
@@ -627,9 +659,10 @@ export default function FlowExecutor({ flow, onClose, onModify }: Props) {
                       </div>
                       <div className="space-y-1.5 pl-5">
                         {Object.entries(outputs).map(([key, val]) => (
-                          <div key={key} className="flex items-start gap-2">
+                          <div key={key} className="group flex items-start gap-2">
                             <span className="text-[10px] font-mono text-zinc-400 w-20 shrink-0 truncate pt-0.5">{key}</span>
-                            <DataValue value={val} />
+                            <div className="flex-1 min-w-0"><DataValue value={val} /></div>
+                            <CopyButton value={val} />
                           </div>
                         ))}
                       </div>
