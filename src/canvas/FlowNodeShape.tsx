@@ -103,7 +103,12 @@ export class FlowNodeShapeUtil extends ShapeUtil<FlowNodeShape> {
         >
           {/* ─ Accent header ─ */}
           <div style={{ background: accentColor, padding: '5px 10px', display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-            <span style={{ fontSize: 13, lineHeight: 1 }}>{icon}</span>
+            {icon.trimStart().startsWith('<svg')
+              ? <span style={{ width: 14, height: 14, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }} dangerouslySetInnerHTML={{ __html: icon }} />
+              : icon.startsWith('http')
+                ? <img src={icon} alt="" width={14} height={14} style={{ objectFit: 'contain', flexShrink: 0 }} />
+                : <span style={{ fontSize: 13, lineHeight: 1 }}>{icon}</span>
+            }
             <span style={{ fontSize: 9, fontWeight: 700, color: '#fff', letterSpacing: '0.07em', textTransform: 'uppercase', opacity: 0.95, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {pluginName}
             </span>
