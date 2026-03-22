@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import type { FlowSpec, FlowNode } from '../ai/flowParser.ts'
 import type { PluginResult, ExecutionContext } from '../plugins/types.ts'
 import { getPlugin, substituteVars, loadVarDefaults } from '../plugins/registry.ts'
@@ -25,43 +25,27 @@ interface Props {
 }
 
 const STATUS_ICON: Record<StepStatus, string> = {
-  pending: '○',
-  running: '●',
-  waiting: '◎',
-  done: '●',
-  error: '✕',
+  pending: '○', running: '●', waiting: '◎', done: '●', error: '✕',
 }
 const STATUS_COLOR: Record<StepStatus, string> = {
-  pending: 'text-zinc-300',
-  running: 'text-blue-500',
-  waiting: 'text-amber-500',
-  done: 'text-emerald-500',
-  error: 'text-red-500',
+  pending: 'text-zinc-300', running: 'text-blue-500', waiting: 'text-amber-500',
+  done: 'text-emerald-500', error: 'text-red-500',
 }
 
-// ─── Data-flow analysis ──────────────────────────────────────────────────────
+// ─── Static analysis (for pre-execution display) ─────────────────────────────
 
-/**
- * For each node, returns the set of output keys provided by upstream nodes
- * (via the edge graph), so the executor knows which inputs will be auto-filled.
- */
 function buildUpstreamOutputMap(flow: FlowSpec): Map<string, Set<string>> {
-  // First pass: capability outputs per node
   const nodeOutputKeys = new Map<string, string[]>()
   for (const node of flow.nodes) {
     const cap = getPlugin(node.plugin)?.capabilities.find((c) => c.action === node.action)
     nodeOutputKeys.set(node.id, cap?.outputs ?? [])
   }
-
-  // Second pass: for each node, union outputs of all predecessors via edges
   const result = new Map<string, Set<string>>()
   for (const node of flow.nodes) {
     const keys = new Set<string>()
     for (const edge of flow.edges) {
       if (edge.to === node.id) {
-        for (const k of (nodeOutputKeys.get(edge.from) ?? [])) {
-          keys.add(k)
-        }
+        for (const k of (nodeOutputKeys.get(edge.from) ?? [])) keys.add(k)
       }
     }
     result.set(node.id, keys)
@@ -69,27 +53,66 @@ function buildUpstreamOutputMap(flow: FlowSpec): Map<string, Set<string>> {
   return result
 }
 
-/**
- * Scan all node params and plugin executeUrls for {{variable}} placeholders.
- * Returns unique variable names in the order they're first encountered.
- */
 function collectTemplateVars(flow: FlowSpec): string[] {
   const seen = new Set<string>()
   const order: string[] = []
-
   const push = (str: string) => {
     for (const [, key] of str.matchAll(/\{\{(\w+)\}\}/g)) {
       if (!seen.has(key)) { seen.add(key); order.push(key) }
     }
   }
-
   for (const node of flow.nodes) {
     for (const val of Object.values(node.params ?? {})) push(val)
     const url = getPlugin(node.plugin)?.executeUrl
     if (url) push(url)
   }
-
   return order
+}
+
+// ─── Data rendering ──────────────────────────────────────────────────────────
+
+function DataValue({ value, inline = false }: { value: string; inline?: boolean }) {
+  const [expanded, setExpanded] = useState(false)
+
+  let arr: string[] | null = null
+  try {
+    const p = JSON.parse(value)
+    if (Array.isArray(p)) arr = p.map(String)
+  } catch { /* not JSON */ }
+
+  if (arr !== null) {
+    const preview = arr.slice(0, expanded ? arr.length : 5)
+    return (
+      <div className={inline ? 'inline-block' : ''}>
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="inline-flex items-center gap-1 text-[10px] font-mono bg-violet-50 border border-violet-200 text-violet-700 rounded px-2 py-0.5 hover:bg-violet-100 transition-colors duration-100 cursor-pointer"
+        >
+          [{arr.length} items] {expanded ? '▲' : '▼'}
+        </button>
+        {expanded && (
+          <div className="mt-1 max-h-40 overflow-y-auto rounded-lg border border-zinc-100 bg-white text-[10px] font-mono divide-y divide-zinc-50">
+            {preview.map((item, i) => (
+              <div key={i} className="flex items-center gap-2 px-2 py-1">
+                <span className="text-zinc-300 w-5 text-right shrink-0">{i + 1}</span>
+                <span className="text-zinc-700 truncate">{item}</span>
+              </div>
+            ))}
+            {!expanded && arr.length > 5 && (
+              <div className="px-2 py-1 text-zinc-400 text-center">+{arr.length - 5} more</div>
+            )}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  const short = value.length > 38 ? value.slice(0, 36) + '…' : value
+  return (
+    <span className="text-[10px] font-mono bg-zinc-100 border border-zinc-200 rounded px-2 py-0.5 text-zinc-600">
+      {short}
+    </span>
+  )
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -102,6 +125,11 @@ export default function FlowExecutor({ flow, onClose, onModify }: Props) {
   const [currentStep, setCurrentStep] = useState(-1)
   const [running, setRunning] = useState(false)
   const [ctx, setCtx] = useState<ExecutionContext>({ resolved: {}, inputs: {} })
+  const [dataStoreOpen, setDataStoreOpen] = useState(false)
+
+  // Per-node outputs tracked both as ref (for async access) and state (for rendering)
+  const nodeOutputsRef = useRef<Record<string, Record<string, string>>>({})
+  const [nodeOutputs, setNodeOutputs] = useState<Record<string, Record<string, string>>>({})
 
   const upstreamMap = useMemo(() => buildUpstreamOutputMap(flow), [flow])
   const templateVarNames = useMemo(() => collectTemplateVars(flow), [flow])
@@ -118,6 +146,26 @@ export default function FlowExecutor({ flow, onClose, onModify }: Props) {
 
   const updateStep = (i: number, patch: Partial<StepState>) =>
     setSteps((prev) => prev.map((s, idx) => (idx === i ? { ...s, ...patch } : s)))
+
+  /** Store a node's outputs in both ref and state. */
+  const addNodeOutputs = (nodeId: string, outputs: Record<string, string>) => {
+    nodeOutputsRef.current = { ...nodeOutputsRef.current, [nodeId]: outputs }
+    setNodeOutputs({ ...nodeOutputsRef.current })
+  }
+
+  /**
+   * Collect all outputs from nodes that feed directly into nodeId via edges.
+   * Uses the ref so it's always current inside async callbacks.
+   */
+  const getUpstreamData = (nodeId: string): Record<string, string> => {
+    const data: Record<string, string> = {}
+    for (const edge of flow.edges) {
+      if (edge.to === nodeId) {
+        Object.assign(data, nodeOutputsRef.current[edge.from] ?? {})
+      }
+    }
+    return data
+  }
 
   const handleConnect = async () => {
     try {
@@ -137,6 +185,9 @@ export default function FlowExecutor({ flow, onClose, onModify }: Props) {
     const plugin = getPlugin(node.plugin)
     setCurrentStep(index)
 
+    // Inject ALL upstream node outputs into ctx.resolved so plugins can read them
+    const upstreamData = getUpstreamData(node.id)
+    Object.assign(execCtx.resolved, upstreamData)
     execCtx.inputs = { ...execCtx.inputs, ...step.inputs }
 
     const cap = plugin?.capabilities.find((c) => c.action === node.action)
@@ -155,12 +206,20 @@ export default function FlowExecutor({ flow, onClose, onModify }: Props) {
 
     try {
       const vars = execCtx.templateVars ?? {}
-      const rawParams = { ...(node.params ?? {}), ...step.inputs }
+
+      // Build params: upstream outputs < node params (AI-set) < manual inputs (user-set)
+      // This means upstream data is available as fallback but explicit params take precedence
+      const rawParams = { ...upstreamData, ...(node.params ?? {}), ...step.inputs }
       const resolvedParams = Object.fromEntries(
         Object.entries(rawParams).map(([k, v]) => [k, substituteVars(v, vars)]),
       )
+
       const result = await plugin.execute(node.action, resolvedParams, execCtx)
-      if (result.outputs) Object.assign(execCtx.resolved, result.outputs)
+
+      if (result.outputs) {
+        Object.assign(execCtx.resolved, result.outputs)
+        addNodeOutputs(node.id, result.outputs)
+      }
 
       if (result.status === 'error') {
         updateStep(index, { status: 'error', result })
@@ -201,6 +260,8 @@ export default function FlowExecutor({ flow, onClose, onModify }: Props) {
   const hasStarted = steps.some((s) => s.status !== 'pending')
   const isDone = hasStarted && steps.every((s) => ['done', 'error'].includes(s.status))
   const usedPlugins = [...new Set(flow.nodes.map((n) => n.plugin).filter((p) => p !== 'system'))]
+  const completedNodeCount = Object.keys(nodeOutputs).length
+  const totalOutputCount = Object.values(nodeOutputs).reduce((n, o) => n + Object.keys(o).length, 0)
 
   return (
     <div className="fixed right-0 top-0 h-full w-[420px] z-50 flex flex-col bg-white border-l border-zinc-200 shadow-2xl shadow-zinc-200/40 overflow-hidden animate-slide-right">
@@ -229,7 +290,6 @@ export default function FlowExecutor({ flow, onClose, onModify }: Props) {
             </button>
           </div>
         </div>
-        {/* Plugin tags */}
         <div className="flex gap-1.5 mt-2.5 flex-wrap">
           {usedPlugins.map((pid) => {
             const p = getPlugin(pid)
@@ -275,9 +335,7 @@ export default function FlowExecutor({ flow, onClose, onModify }: Props) {
                 type={key.toLowerCase().includes('key') || key.toLowerCase().includes('secret') || key.toLowerCase().includes('token') ? 'password' : 'text'}
                 placeholder={`Enter ${key}`}
                 value={templateVarValues[key] ?? ''}
-                onChange={(e) =>
-                  setTemplateVarValues((prev) => ({ ...prev, [key]: e.target.value }))
-                }
+                onChange={(e) => setTemplateVarValues((prev) => ({ ...prev, [key]: e.target.value }))}
                 disabled={hasStarted}
                 className="flex-1 bg-white border border-zinc-200 rounded-lg px-2.5 py-1.5 text-xs font-mono text-zinc-900 placeholder-zinc-300 outline-none focus:border-blue-400 focus:shadow-[0_0_0_3px_rgba(59,130,246,0.08)] transition-[border-color,box-shadow] duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
               />
@@ -297,6 +355,9 @@ export default function FlowExecutor({ flow, onClose, onModify }: Props) {
           const outputKeys = cap?.outputs ?? []
           const upstreamKeys = upstreamMap.get(node.id) ?? new Set<string>()
           const isCurrent = i === currentStep
+
+          // Runtime upstream data (populated after upstream nodes complete)
+          const runtimeUpstream = getUpstreamData(node.id)
 
           return (
             <div
@@ -337,8 +398,10 @@ export default function FlowExecutor({ flow, onClose, onModify }: Props) {
                   {allInputDefs.map((field) => {
                     const paramVal = node.params?.[field.key]
                     const userVal = step.inputs[field.key]
-                    const resolvedVal = ctx.resolved[field.key]
-                    const isFromUpstream = !paramVal && !userVal && upstreamKeys.has(field.key)
+                    const runtimeVal = runtimeUpstream[field.key]
+                    const resolvedCtxVal = ctx.resolved[field.key]
+                    const isFromUpstream = !paramVal && !userVal && (upstreamKeys.has(field.key) || runtimeVal)
+                    const actualUpstreamVal = runtimeVal ?? resolvedCtxVal
                     const needsManual = !paramVal && !userVal && !isFromUpstream
 
                     // Pre-filled by AI (possibly containing {{vars}})
@@ -359,18 +422,13 @@ export default function FlowExecutor({ flow, onClose, onModify }: Props) {
                       )
                     }
 
-                    // Filled from upstream (show annotation, or actual value if resolved)
-                    if (isFromUpstream || (resolvedVal && !userVal)) {
-                      const displayVal = resolvedVal
-                        ? (resolvedVal.length > 30 ? resolvedVal.slice(0, 28) + '…' : resolvedVal)
-                        : null
+                    // From upstream (show actual value if available, otherwise "auto" tag)
+                    if (isFromUpstream) {
                       return (
                         <div key={field.key} className="flex items-center gap-2">
                           <span className="text-[10px] text-zinc-400 w-24 shrink-0 truncate">{field.label ?? field.key}</span>
-                          {displayVal ? (
-                            <span className="text-[10px] font-mono bg-emerald-50 border border-emerald-200 text-emerald-700 rounded px-2 py-0.5 truncate max-w-[140px]">
-                              {displayVal}
-                            </span>
+                          {actualUpstreamVal ? (
+                            <DataValue value={actualUpstreamVal} inline />
                           ) : (
                             <span className="text-[10px] text-amber-600 bg-amber-50 border border-amber-200 rounded px-2 py-0.5 italic">
                               auto · from upstream ↑
@@ -380,7 +438,7 @@ export default function FlowExecutor({ flow, onClose, onModify }: Props) {
                       )
                     }
 
-                    // User entered value — show as badge only after step has run
+                    // User-entered value — show badge only after step has run; input field handles pending/waiting
                     if (userVal && step.status !== 'pending' && step.status !== 'waiting') {
                       return (
                         <div key={field.key} className="flex items-center gap-2">
@@ -416,32 +474,25 @@ export default function FlowExecutor({ flow, onClose, onModify }: Props) {
                 </div>
               )}
 
-              {/* ─ Outputs (shown after completion) ─ */}
+              {/* ─ Outputs ─ */}
               {outputKeys.length > 0 && step.status !== 'pending' && (
-                <div className="px-3 pb-2 space-y-1">
+                <div className="px-3 pb-2 space-y-1.5">
                   <div className="text-[9px] font-semibold text-zinc-400 uppercase tracking-widest">Outputs</div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {outputKeys.map((key) => {
-                      const val = step.result?.outputs?.[key]
-                      const truncated = val
-                        ? (val.length > 32 ? val.slice(0, 30) + '…' : val)
-                        : null
-                      return (
-                        <div key={key} className="flex items-center gap-1">
-                          <span className="text-[9px] font-mono text-zinc-400">{key}</span>
-                          {truncated ? (
-                            <span className="text-[9px] font-mono bg-zinc-100 border border-zinc-200 rounded px-1.5 py-0.5 text-zinc-600">
-                              {truncated}
-                            </span>
-                          ) : (
-                            step.status === 'running'
-                              ? <span className="text-[9px] text-zinc-300 italic">…</span>
-                              : <span className="text-[9px] text-zinc-300 italic">—</span>
-                          )}
-                        </div>
-                      )
-                    })}
-                  </div>
+                  {outputKeys.map((key) => {
+                    const val = step.result?.outputs?.[key]
+                    return (
+                      <div key={key} className="flex items-start gap-2">
+                        <span className="text-[10px] font-mono text-zinc-400 w-24 shrink-0 truncate pt-0.5">{key}</span>
+                        {val ? (
+                          <DataValue value={val} />
+                        ) : (
+                          step.status === 'running'
+                            ? <span className="text-[10px] text-zinc-300 italic">…</span>
+                            : <span className="text-[10px] text-zinc-300 italic">—</span>
+                        )}
+                      </div>
+                    )
+                  })}
                 </div>
               )}
 
@@ -488,6 +539,51 @@ export default function FlowExecutor({ flow, onClose, onModify }: Props) {
           )
         })}
       </div>
+
+      {/* ─ Data Store ─ */}
+      {completedNodeCount > 0 && (
+        <div className="border-t border-zinc-100 shrink-0">
+          <button
+            onClick={() => setDataStoreOpen(!dataStoreOpen)}
+            className="w-full flex items-center justify-between px-5 py-2.5 hover:bg-zinc-50 transition-colors duration-100"
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">Data Store</span>
+              <span className="text-[9px] bg-zinc-100 border border-zinc-200 rounded-full px-2 py-0.5 text-zinc-500 font-mono">
+                {totalOutputCount} value{totalOutputCount !== 1 ? 's' : ''}
+              </span>
+            </div>
+            <span className="text-zinc-400 text-[10px]">{dataStoreOpen ? '▲' : '▼'}</span>
+          </button>
+
+          {dataStoreOpen && (
+            <div className="px-4 pb-3 space-y-3 max-h-64 overflow-y-auto">
+              {flow.nodes
+                .filter((n) => nodeOutputs[n.id] && Object.keys(nodeOutputs[n.id]!).length > 0)
+                .map((node) => {
+                  const plugin = getPlugin(node.plugin)
+                  const outputs = nodeOutputs[node.id]!
+                  return (
+                    <div key={node.id}>
+                      <div className="flex items-center gap-1.5 mb-1.5">
+                        <span className="text-sm">{plugin?.icon ?? '▸'}</span>
+                        <span className="text-[10px] font-semibold text-zinc-700">{node.label}</span>
+                      </div>
+                      <div className="space-y-1.5 pl-5">
+                        {Object.entries(outputs).map(([key, val]) => (
+                          <div key={key} className="flex items-start gap-2">
+                            <span className="text-[10px] font-mono text-zinc-400 w-20 shrink-0 truncate pt-0.5">{key}</span>
+                            <DataValue value={val} />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )
+                })}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ─ Footer ─ */}
       <div className="px-5 py-4 border-t border-zinc-100 shrink-0">

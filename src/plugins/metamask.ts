@@ -67,7 +67,6 @@ export const MetaMaskPlugin: Plugin = {
         try {
           const existing = await getConnectedAccount()
           const address = existing ?? (await connectWallet())
-          ctx.resolved.wallet_address = address
           ctx.walletAddress = address
           return { status: 'done', outputs: { wallet_address: address }, display: address.slice(0, 6) + '…' + address.slice(-4) }
         } catch (e) {
@@ -77,9 +76,9 @@ export const MetaMaskPlugin: Plugin = {
 
       case 'send_eth': {
         const to =
-          ctx.resolved.resolved_address ?? ctx.resolved.to ?? ctx.resolved.ens_resolved ??
-          params.to ?? params.recipient ?? params.address ??
-          ctx.inputs.to ?? ctx.inputs.recipient
+          params.to ?? params.address ?? params.resolved_address ??
+          ctx.resolved.resolved_address ?? ctx.resolved.to ?? ctx.resolved.address ??
+          ctx.inputs.to ?? ctx.inputs.address
         const amount =
           params.amount ?? params.value ?? params.eth ??
           ctx.inputs.amount ?? ctx.inputs.value
@@ -91,7 +90,6 @@ export const MetaMaskPlugin: Plugin = {
 
         try {
           const txHash = await sendETH(from, to, amount)
-          ctx.resolved.tx_hash = txHash
           return {
             status: 'done',
             outputs: { tx_hash: txHash },
@@ -119,7 +117,12 @@ export const MetaMaskPlugin: Plugin = {
         return { status: 'waiting', display: 'Waiting for approval…' }
 
       case 'batch_send': {
-        const walletsJson = ctx.resolved.wallets ?? ctx.resolved.recipients ?? ctx.inputs.wallets
+        // Check params first (executor injects upstream outputs as params)
+        // then fall back to ctx.resolved for backwards compat
+        const walletsJson =
+          params.wallets ?? params.rows ?? params.recipients ??
+          ctx.resolved.wallets ?? ctx.resolved.rows ?? ctx.resolved.recipients ??
+          ctx.inputs.wallets
         if (!walletsJson) {
           return { status: 'error', error: 'No wallet list in context — connect a fetch step (e.g. Google Sheets) upstream.' }
         }
@@ -150,8 +153,6 @@ export const MetaMaskPlugin: Plugin = {
           }
         }
 
-        ctx.resolved.tx_hashes = JSON.stringify(txHashes)
-        ctx.resolved.sent_count = String(txHashes.length)
         return {
           status: 'done',
           outputs: { tx_hashes: JSON.stringify(txHashes), sent_count: String(txHashes.length) },

@@ -43,12 +43,6 @@ export const ENSPlugin: Plugin = {
         const address = await resolveENS(name)
         if (!address) return { status: 'error', error: `Could not resolve ${name}` }
 
-        // Store under multiple keys so any downstream plugin can find it
-        ctx.resolved.resolved_address = address
-        ctx.resolved.address = address
-        ctx.resolved.ens_resolved = address
-        ctx.resolved.to = address
-        ctx.resolved.ens_name = name
         return {
           status: 'done',
           outputs: { resolved_address: address, address, ens_name: name, to: address },
@@ -57,12 +51,13 @@ export const ENSPlugin: Plugin = {
       }
 
       case 'lookup_address': {
-        const address = params.address ?? params.wallet ?? ctx.inputs.address ?? ctx.resolved.wallet_address ?? ctx.resolved.resolved_address
+        const address =
+          params.address ?? params.resolved_address ?? params.wallet ??
+          ctx.inputs.address ?? ctx.resolved.address ?? ctx.resolved.resolved_address
         if (!address) return { status: 'error', error: 'Address required' }
 
         const name = await lookupAddress(address)
         const display = name ?? 'No ENS name found'
-        if (name) ctx.resolved.ens_name = name
         return { status: 'done', outputs: name ? { ens_name: name } : {}, display }
       }
 

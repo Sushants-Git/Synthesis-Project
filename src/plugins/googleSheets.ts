@@ -80,14 +80,12 @@ export const GoogleSheetsPlugin: Plugin = {
         .filter((v) => v !== null && v !== undefined && v !== '')
         .map(String)
 
-      ctx.resolved.rows   = JSON.stringify(rows)
-      ctx.resolved.count  = String(rows.length)
-      // Also expose as 'wallets' so metamask:batch_send can find them without extra config
-      ctx.resolved.wallets = ctx.resolved.rows
+      const rowsJson = JSON.stringify(rows)
 
       return {
         status: 'done',
-        outputs: { rows: ctx.resolved.rows, count: ctx.resolved.count, wallets: ctx.resolved.rows },
+        // Expose as both 'rows' and 'wallets' so batch_send finds it without extra config
+        outputs: { rows: rowsJson, wallets: rowsJson, count: String(rows.length) },
         display: `Fetched ${rows.length} rows from sheet`,
       }
     } catch (e) {
