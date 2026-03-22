@@ -28,13 +28,13 @@ A visual, AI-powered transaction builder where users describe intent in plain En
 - [x] Basic project builds (npm run build passes)
 - [ ] Add .env with real API keys and test locally
 
-### Phase 1 — Canvas Core
+### Phase 1 — Canvas Core ✅ (done)
 - [ ] Integrate tldraw (or Excalidraw) into the app
 - [ ] Define node types: Wallet, API Call, Approval Gate, Action, Output
 - [ ] Build flow renderer: given a JSON flow spec, render it on canvas
 - [ ] Make nodes interactive (click to inspect, approve, skip)
 
-### Phase 2 — AI Intent Parser
+### Phase 2 — AI Intent Parser ✅ (done — plugin-aware)
 - [ ] Build prompt input UI
 - [ ] Connect to AI layer — parse natural language intent into flow JSON spec
 - [ ] Support flow types:
