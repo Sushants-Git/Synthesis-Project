@@ -6,6 +6,7 @@ export default defineConfig(({ mode }) => {
   const twitterBearer = env.VITE_TWITTER_BEARER_TOKEN ?? ''
   const openaiKey = env.VITE_OPENAI_API_KEY ?? ''
   const claudeKey = env.VITE_ANTHROPIC_API_KEY ?? ''
+  const githubToken = env.VITE_GITHUB_TOKEN ?? ''
 
   return {
     plugins: [react()],
@@ -20,6 +21,21 @@ export default defineConfig(({ mode }) => {
           configure: (proxy) => {
             proxy.on('proxyReq', (proxyReq) => {
               proxyReq.setHeader('Authorization', `Bearer ${twitterBearer}`)
+            })
+          },
+        },
+
+        // Proxy /api/github/* → https://api.github.com/*
+        // Auth header injected server-side (60 req/hr anon → 5000/hr with token)
+        '/api/github': {
+          target: 'https://api.github.com',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/api\/github/, ''),
+          configure: (proxy) => {
+            proxy.on('proxyReq', (proxyReq) => {
+              if (githubToken) proxyReq.setHeader('Authorization', `token ${githubToken}`)
+              proxyReq.setHeader('Accept', 'application/vnd.github.v3+json')
+              proxyReq.setHeader('User-Agent', 'canvii-app')
             })
           },
         },

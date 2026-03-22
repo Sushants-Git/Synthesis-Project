@@ -36,6 +36,10 @@ const EXAMPLE_PROMPTS: Record<string, string[]> = {
     'deploy a simple contract to Status Network gaslessly',
     'send a gasless transaction on Status Network Sepolia',
   ],
+  github: [
+    'show me the top repos and total stars for torvalds',
+    'fetch contributors for ethereum/go-ethereum and score them with GPT',
+  ],
 }
 
 function ChevronRight({ open }: { open: boolean }) {

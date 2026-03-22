@@ -70,6 +70,10 @@ Reading data:
   → fetch tweets for ONE handle: twitter:get_tweets → tweets[]
   → fetch tweets for MULTIPLE handles: twitter:get_batch_tweets → tweets[] (each prefixed "@handle: text")
   → single Twitter handle detail: twitter:verify_handle
+  → GitHub user profile: github:get_user(username) → profile, followers, public_repos
+  → GitHub repos + stars: github:get_repos(username, sort?, limit?) → repos[], total_stars
+  → GitHub single repo stats: github:get_repo_stats(username, repo) → stars, forks, open_issues
+  → GitHub repo contributors: github:get_contributors(username, repo) → contributors[], contributor_names[]
 
 Transforming / filtering data:
   → GPT true/false filter: chatgpt:process (prompt returns ["true","false",...]) → util:filter
@@ -99,6 +103,9 @@ Identity / gating:
   chatgpt:process → util:filter (conditions)      wire {"results":"conditions"}
   util:filter → ens:resolve_batch                 wire {"kept":"names"}
   util:filter → batch_send                        wire {"kept":"recipients"}
+  github:get_repos → chatgpt:process              wire {"repos":"items"}
+  github:get_contributors → chatgpt:process       wire {"contributors":"items"}
+  github:get_user → chatgpt:process               wire {"profile":"items"}
 
 ━━━ HARD RULES ━━━
 

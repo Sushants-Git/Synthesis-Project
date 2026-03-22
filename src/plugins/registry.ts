@@ -6,6 +6,7 @@ import { TwitterPlugin } from './twitter.ts'
 import { GoogleSheetsPlugin } from './googleSheets.ts'
 import { ChatGPTPlugin } from './chatgpt.ts'
 import { UtilPlugin } from './util.ts'
+import { GitHubPlugin } from './github.ts'
 import {
   loadSoftPlugins as _loadSoftPlugins,
   buildSoftPlugin,
@@ -31,6 +32,7 @@ const HARD_PLUGINS: Record<string, Plugin> = {
   sheets: { ...GoogleSheetsPlugin, category: 'hard' },
   chatgpt: { ...ChatGPTPlugin, category: 'hard' },
   util: { ...UtilPlugin, category: 'hard' },
+  github: { ...GitHubPlugin, category: 'hard' },
 }
 
 const PLUGINS: Record<string, Plugin> = { ...HARD_PLUGINS }
