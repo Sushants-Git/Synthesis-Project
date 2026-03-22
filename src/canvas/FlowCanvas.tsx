@@ -30,6 +30,11 @@ const flowFrameIds = new Set<string>()
 const SIDEBAR_W = 224
 const SHAPE_UTILS = [FlowNodeShapeUtil]
 
+// Stable tldraw component overrides — must live outside the render function
+// so tldraw never remounts when these are passed as props.
+const TLDRAW_COMPONENTS_DEFAULT = {}
+const TLDRAW_COMPONENTS_NO_STYLE = { StylePanel: null }
+
 function recomputeFramePositions(editor: Editor): FrameButtonPos[] {
   const out: FrameButtonPos[] = []
   for (const id of flowFrameIds) {
@@ -49,6 +54,8 @@ export default function FlowCanvas() {
   const [executingFlow, setExecutingFlow] = useState<FlowSpec | null>(null)
   /** Conversation history for the current floating prompt session */
   const [conversation, setConversation] = useState<ConversationMessage[]>([])
+  /** Whether tldraw's StylePanel (colors/styles toolbar) is visible */
+  const [showStylePanel, setShowStylePanel] = useState(true)
 
   const closePrompt = useCallback(() => {
     setPromptState(null)
@@ -189,7 +196,10 @@ export default function FlowCanvas() {
 
   const openExecute = useCallback((btn: FrameButtonPos) => {
     const flow = flowSpecMap.get(btn.frameId)
-    if (flow) setExecutingFlow(flow)
+    if (flow) {
+      setExecutingFlow(flow)
+      setShowStylePanel(false) // hide tldraw panel so it doesn't cover the executor ✕
+    }
   }, [])
 
   return (
@@ -201,7 +211,22 @@ export default function FlowCanvas() {
         style={{ marginLeft: SIDEBAR_W }}
         onDoubleClick={handleDoubleClick}
       >
-        <Tldraw onMount={handleMount} shapeUtils={SHAPE_UTILS} />
+        <Tldraw
+          onMount={handleMount}
+          shapeUtils={SHAPE_UTILS}
+          components={showStylePanel ? TLDRAW_COMPONENTS_DEFAULT : TLDRAW_COMPONENTS_NO_STYLE}
+        />
+
+        {/* Toggle tldraw style panel — only when executor is closed */}
+        {!executingFlow && (
+          <button
+            onClick={() => setShowStylePanel((v) => !v)}
+            title={showStylePanel ? 'Hide tldraw panel' : 'Show tldraw panel'}
+            className="fixed top-3 right-3 z-40 px-2 py-1 bg-white border border-zinc-200 rounded-md shadow-sm text-[10px] text-zinc-400 hover:text-zinc-600 hover:border-zinc-300 transition-colors duration-150 select-none"
+          >
+            {showStylePanel ? 'Hide panel' : 'Show panel'}
+          </button>
+        )}
 
         {/* Persistent Execute / Modify buttons */}
         {!promptState && !executingFlow && frameButtons.map((btn) => (
@@ -258,7 +283,13 @@ export default function FlowCanvas() {
 
         {/* Flow executor */}
         {executingFlow && (
-          <FlowExecutor flow={executingFlow} onClose={() => setExecutingFlow(null)} />
+          <FlowExecutor
+            flow={executingFlow}
+            onClose={() => {
+              setExecutingFlow(null)
+              setShowStylePanel(true)
+            }}
+          />
         )}
 
         {/* Canvas hints */}
