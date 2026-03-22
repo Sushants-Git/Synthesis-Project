@@ -111,7 +111,7 @@ export function renderFlowIntoFrame(editor: Editor, flow: FlowSpec, frameId: TLS
       props: {
         start: { x: 0, y: 0 },
         end: { x: ex - sx, y: ey - sy },
-        color: 'grey',
+        color: 'light-violet',
         size: 's',
         text: label,
       },
