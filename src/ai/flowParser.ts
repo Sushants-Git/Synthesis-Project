@@ -101,6 +101,11 @@ edges: n1→n2 label:"address", n2→n3 label:"address", n3→n4 label:"tx_hash"
 n1:sheets:fetch_rows(sheet_url:"...") → n2:metamask:approve → n3:metamask:batch_send(amount:"0.01") → n4:system:output
 edges: n1→n2 label:"wallets", n2→n3 label:"wallets", n3→n4 label:"sent_count"
 
+"fetch ENS names, resolve them, split 0.5 ETH equally":
+n1:sheets:fetch_rows(sheet_url:"...") → n2:ens:resolve_batch → n3:metamask:approve → n4:metamask:batch_send(total_amount:"0.5") → n5:system:output
+edges: n1→n2 label:"rows", n2→n3 label:"addresses", n3→n4 label:"addresses", n4→n5 label:"sent_count"
+NOTE: use total_amount when splitting a fixed total equally; use amount when each recipient gets the same fixed amount.
+
 "fetch ENS names from Google Sheet and resolve them to addresses":
 n1:sheets:fetch_rows(sheet_url:"...") → n2:ens:resolve_batch → n3:system:output
 edges: n1→n2 label:"rows", n2→n3 label:"addresses"

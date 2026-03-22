@@ -6,7 +6,11 @@ export const MetaMaskPlugin: Plugin = {
   name: 'MetaMask',
   description: 'Wallet connection, ETH transfers, and ERC-7715 delegations',
   aiDescription:
-    'MetaMask wallet integration. Actions: connect_wallet (connect and get address), send_eth (transfer ETH to an address), create_delegation (ERC-7715 intent-based delegation — allow an agent or contract to act on behalf of the wallet with constraints like max amount), approve (pause for user confirmation before fund movement).',
+    'MetaMask wallet integration. Actions: connect_wallet (connect and get address), ' +
+    'send_eth (transfer ETH to a single address — params: to, amount), ' +
+    'batch_send (send ETH to a list of addresses from upstream — params: amount (per recipient) OR total_amount (split equally); reads addresses/wallets/rows from upstream automatically), ' +
+    'create_delegation (ERC-7715 intent-based delegation), ' +
+    'approve (UI confirmation gate — pauses flow until user clicks Approve, then MetaMask opens for the next transaction step).',
   icon: '🦊',
   color: 'orange',
   prizeTrack: 'MetaMask Best Use of Delegations ($3,000)',
@@ -51,9 +55,10 @@ export const MetaMaskPlugin: Plugin = {
     {
       action: 'batch_send',
       label: 'Batch Send ETH',
-      description: 'Send ETH to a list of addresses (reads wallet list from upstream context)',
+      description: 'Send ETH to a list of addresses from upstream (sheets or ens:resolve_batch)',
       params: [
-        { key: 'amount', label: 'Amount per recipient (ETH)', placeholder: '0.01', inputType: 'eth_amount', required: true },
+        { key: 'amount', label: 'Amount per recipient (ETH)', placeholder: '0.01', inputType: 'eth_amount', required: false },
+        { key: 'total_amount', label: 'Total ETH to split equally', placeholder: '0.5', inputType: 'eth_amount', required: false },
       ],
       outputs: ['tx_hashes', 'sent_count'],
     },
@@ -115,33 +120,40 @@ export const MetaMaskPlugin: Plugin = {
         return { status: 'waiting', display: 'Waiting for approval…' }
 
       case 'batch_send': {
-        // Check params first (executor injects upstream outputs as params)
-        // then fall back to ctx.resolved for backwards compat
+        // Accept any key that could carry a wallet/address list
         const walletsJson =
-          params.wallets ?? params.rows ?? params.recipients ??
-          ctx.resolved.wallets ?? ctx.resolved.rows ?? ctx.resolved.recipients ??
-          ctx.inputs.wallets
+          params.wallets ?? params.addresses ?? params.rows ?? params.recipients ??
+          ctx.resolved.wallets ?? ctx.resolved.addresses ?? ctx.resolved.rows ?? ctx.resolved.recipients ??
+          ctx.inputs.wallets ?? ctx.inputs.addresses
         if (!walletsJson) {
-          return { status: 'error', error: 'No wallet list in context — connect a fetch step (e.g. Google Sheets) upstream.' }
+          return { status: 'error', error: 'No wallet list found — connect sheets:fetch_rows or ens:resolve_batch upstream.' }
         }
 
         let wallets: string[]
         try {
-          wallets = JSON.parse(walletsJson) as string[]
+          wallets = (JSON.parse(walletsJson) as string[]).map((a) => a.trim()).filter(Boolean)
         } catch {
-          return { status: 'error', error: 'wallet list in context is not valid JSON' }
+          return { status: 'error', error: 'Wallet list is not valid JSON' }
         }
+        if (wallets.length === 0) return { status: 'error', error: 'Wallet list is empty' }
 
-        const amount = params.amount ?? ctx.inputs.amount
-        if (!amount) return { status: 'error', error: 'Amount required' }
+        // Support per-recipient amount OR a total to split equally
+        let amount: string
+        if (params.total_amount ?? ctx.inputs.total_amount) {
+          const total = parseFloat(params.total_amount ?? ctx.inputs.total_amount)
+          amount = (total / wallets.length).toFixed(6)
+        } else {
+          amount = params.amount ?? ctx.inputs.amount
+        }
+        if (!amount) return { status: 'error', error: 'amount or total_amount required' }
 
         const from = ctx.walletAddress ?? ctx.resolved.wallet_address
-        if (!from) return { status: 'error', error: 'Wallet not connected' }
+        if (!from) return { status: 'error', error: 'Wallet not connected — add a metamask:connect_wallet step' }
 
         const txHashes: string[] = []
         for (const to of wallets) {
           try {
-            const hash = await sendETH(from, to.trim(), amount)
+            const hash = await sendETH(from, to, amount)
             txHashes.push(hash)
           } catch (e) {
             return {
