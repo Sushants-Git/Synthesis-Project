@@ -486,8 +486,9 @@ export default function FlowExecutor({ flow, onClose, onModify }: Props) {
 
                     // Pre-filled by AI (possibly containing {{vars}})
                     if (paramVal) {
-                      const resolved = substituteVars(paramVal, templateVarValues)
-                      const hasVar = /\{\{/.test(paramVal)
+                      const paramStr = typeof paramVal === 'string' ? paramVal : String(paramVal)
+                      const resolved = substituteVars(paramStr, templateVarValues)
+                      const hasVar = /\{\{/.test(paramStr)
                       return (
                         <div key={field.key} className="group flex items-center gap-2">
                           <span className="text-[10px] text-zinc-400 w-24 shrink-0 truncate">{field.label ?? field.key}</span>

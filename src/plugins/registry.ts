@@ -184,7 +184,8 @@ export function loadVarDefaults(): Record<string, string> {
  * Replace all {{variable}} placeholders in a string with values from the map.
  * Unmatched placeholders are left as-is so missing vars are obvious.
  */
-export function substituteVars(str: string, vars: Record<string, string>): string {
+export function substituteVars(str: unknown, vars: Record<string, string>): string {
+  if (typeof str !== 'string') return str === null || str === undefined ? '' : String(str)
   return str.replace(/\{\{(\w+)\}\}/g, (_, key: string) => vars[key] ?? `{{${key}}}`)
 }
 
