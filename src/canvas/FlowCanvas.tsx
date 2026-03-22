@@ -1,4 +1,4 @@
-import { createShapeId, Tldraw, type Editor, type TLShapeId } from '@tldraw/tldraw'
+import { Tldraw, type Editor, type TLShapeId } from '@tldraw/tldraw'
 import '@tldraw/tldraw/tldraw.css'
 import { useCallback, useRef, useState } from 'react'
 import FloatingPrompt from '../components/FloatingPrompt.tsx'
@@ -6,7 +6,7 @@ import FlowExecutor from '../components/FlowExecutor.tsx'
 import PluginSidebar from '../components/PluginSidebar.tsx'
 import { parseIntent, type FlowSpec, type ConversationMessage } from '../ai/flowParser.ts'
 import { renderFlowIntoFrame, renderFlowAtPoint } from './renderFlow.ts'
-import { FlowNodeShapeUtil, PLUGIN_CSS_COLORS } from './FlowNodeShape.tsx'
+import { FlowNodeShapeUtil } from './FlowNodeShape.tsx'
 import { EXAMPLE_FLOW } from './exampleFlow.ts'
 import { getPlugin, loadPersistedPlugins } from '../plugins/registry.ts'
 
@@ -262,32 +262,38 @@ export default function FlowCanvas() {
     const plugin = getPlugin(pluginId)
     const cap = plugin?.capabilities.find((c) => c.action === action)
 
-    const vp = editor.getViewportScreenBounds()
-    const cx = SIDEBAR_W + (vp.w - SIDEBAR_W) / 2
-    const cy = vp.h / 2
-    const pagePos = editor.screenToPage({ x: cx, y: cy })
+    // Build a minimal 2-node FlowSpec: the chosen block → system:output
+    const flow: FlowSpec = {
+      title: cap?.label ?? action,
+      description: cap?.description ?? '',
+      nodes: [
+        {
+          id: 'n1',
+          plugin: pluginId,
+          action,
+          label: cap?.label ?? action,
+          description: cap?.description ?? '',
+          params: {},
+        },
+        {
+          id: 'n2',
+          plugin: 'system',
+          action: 'output',
+          label: 'Output',
+          description: 'Show result',
+          params: {},
+        },
+      ],
+      edges: [{ from: 'n1', to: 'n2', label: cap?.outputs?.[0] ?? 'result' }],
+    }
 
-    const accentColor = plugin ? (PLUGIN_CSS_COLORS[plugin.color] ?? '#6b7280') : '#6b7280'
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    editor.createShape<any>({
-      id: createShapeId(),
-      type: 'flow-node',
-      x: pagePos.x - 100,
-      y: pagePos.y - 44,
-      props: {
-        w: 200,
-        h: 88,
-        plugin: pluginId,
-        pluginName: plugin?.name ?? pluginId,
-        action,
-        label: cap?.label ?? action,
-        description: cap?.description ?? '',
-        params: {},
-        icon: plugin?.icon ?? '▸',
-        accentColor,
-      },
-    })
+    const approxW = 2 * 220 + 80 + 64
+    const approxH = 200
+    const { x, y } = findFreePosition(editor, approxW, approxH)
+    const frameId = renderFlowAtPoint(editor, flow, x, y)
+    flowFrameIds.add(frameId)
+    flowSpecMap.set(frameId, flow)
+    setFrameButtons(recomputeFramePositions(editor))
   }, [])
 
   return (
