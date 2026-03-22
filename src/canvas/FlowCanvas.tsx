@@ -195,7 +195,7 @@ export default function FlowCanvas() {
         {!promptState && !executingFlow && frameButtons.map((btn) => (
           <div
             key={btn.frameId}
-            className="fixed z-40 flex gap-1.5"
+            className="fixed z-40 flex gap-1.5 animate-fade-up"
             style={{
               left: Math.max(btn.screenX, SIDEBAR_W + 8),
               top: Math.max(btn.screenY, 8),
@@ -203,13 +203,13 @@ export default function FlowCanvas() {
           >
             <button
               onClick={() => openExecute(btn)}
-              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-lg shadow-lg transition-colors"
+              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 active:scale-[0.96] text-white text-xs font-semibold rounded-lg shadow-md shadow-blue-200 transition-[transform,background-color] duration-150"
             >
               ⚡ Execute
             </button>
             <button
               onClick={() => openModify(btn)}
-              className="px-3 py-1.5 bg-white hover:bg-zinc-50 border border-zinc-300 text-zinc-700 text-xs font-medium rounded-lg shadow-lg transition-colors"
+              className="px-3 py-1.5 bg-white hover:bg-zinc-50 active:scale-[0.96] border border-zinc-200 text-zinc-600 text-xs font-medium rounded-lg shadow-sm transition-[transform,background-color] duration-150"
             >
               Modify
             </button>

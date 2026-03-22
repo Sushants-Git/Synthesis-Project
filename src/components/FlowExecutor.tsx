@@ -25,13 +25,13 @@ interface Props {
 
 const STATUS_ICON: Record<StepStatus, string> = {
   pending: '○',
-  running: '◌',
+  running: '●',
   waiting: '◎',
   done: '●',
   error: '✕',
 }
 const STATUS_COLOR: Record<StepStatus, string> = {
-  pending: 'text-zinc-400',
+  pending: 'text-zinc-300',
   running: 'text-blue-500',
   waiting: 'text-amber-500',
   done: 'text-emerald-500',
@@ -75,20 +75,17 @@ export default function FlowExecutor({ flow, onClose }: Props) {
     const plugin = getPlugin(node.plugin)
     setCurrentStep(index)
 
-    // Merge this step's user inputs into context
     execCtx.inputs = { ...execCtx.inputs, ...step.inputs }
 
-    // Check if the plugin capability requires approval (pause before executing)
     const cap = plugin?.capabilities.find((c) => c.action === node.action)
     if (cap?.requiresApproval && step.status === 'pending') {
       updateStep(index, { status: 'waiting' })
-      return // user must click Approve
+      return
     }
 
     updateStep(index, { status: 'running' })
 
     if (!plugin) {
-      // System node (output, filter, note)
       updateStep(index, { status: 'done', result: { status: 'done', display: node.description } })
       await runFrom(index + 1, execCtx)
       return
@@ -103,7 +100,6 @@ export default function FlowExecutor({ flow, onClose }: Props) {
         setRunning(false)
       } else if (result.status === 'waiting') {
         updateStep(index, { status: 'waiting', result })
-        // stays paused — user clicks Approve
       } else {
         updateStep(index, { status: 'done', result })
         await runFrom(index + 1, execCtx)
@@ -137,27 +133,31 @@ export default function FlowExecutor({ flow, onClose }: Props) {
   const hasStarted = steps.some((s) => s.status !== 'pending')
   const isDone = hasStarted && steps.every((s) => ['done', 'error'].includes(s.status))
 
-  // Which plugins are used in this flow
   const usedPlugins = [...new Set(flow.nodes.map((n) => n.plugin).filter((p) => p !== 'system'))]
 
   return (
-    <div className="fixed right-0 top-0 h-full w-[400px] z-50 flex flex-col bg-white border-l border-zinc-200 shadow-2xl overflow-hidden">
+    <div className="fixed right-0 top-0 h-full w-[400px] z-50 flex flex-col bg-white border-l border-zinc-200 shadow-2xl shadow-zinc-200/40 overflow-hidden animate-slide-right">
       {/* Header */}
-      <div className="px-5 py-4 border-b border-zinc-200 shrink-0">
+      <div className="px-5 py-4 border-b border-zinc-100 shrink-0">
         <div className="flex items-start justify-between gap-2">
           <div>
             <h2 className="text-sm font-semibold text-zinc-900 leading-tight">{flow.title}</h2>
-            <p className="text-xs text-zinc-500 mt-0.5">{flow.description}</p>
+            <p className="text-xs text-zinc-400 mt-0.5 leading-snug">{flow.description}</p>
           </div>
-          <button onClick={onClose} className="text-zinc-400 hover:text-zinc-600 text-base shrink-0">✕</button>
+          <button
+            onClick={onClose}
+            className="text-zinc-400 hover:text-zinc-600 text-sm leading-none mt-0.5 shrink-0 transition-colors duration-100 active:scale-[0.9]"
+          >
+            ✕
+          </button>
         </div>
         {/* Plugin tags */}
-        <div className="flex gap-1.5 mt-2 flex-wrap">
+        <div className="flex gap-1.5 mt-2.5 flex-wrap">
           {usedPlugins.map((pid) => {
             const p = getPlugin(pid)
             if (!p) return null
             return (
-              <span key={pid} className="inline-flex items-center gap-1 px-2 py-0.5 bg-zinc-100 border border-zinc-200 rounded-full text-[10px] text-zinc-600">
+              <span key={pid} className="inline-flex items-center gap-1 px-2 py-0.5 bg-zinc-100 border border-zinc-200 rounded-full text-[10px] text-zinc-600 font-medium">
                 {p.icon} {p.name}
               </span>
             )
@@ -166,17 +166,17 @@ export default function FlowExecutor({ flow, onClose }: Props) {
       </div>
 
       {/* Wallet */}
-      <div className="px-5 py-3 border-b border-zinc-200 shrink-0">
+      <div className="px-5 py-3 border-b border-zinc-100 shrink-0">
         {walletAddress ? (
           <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
             <span className="text-xs text-zinc-700 font-mono">{shortenAddress(walletAddress)}</span>
-            <span className="text-xs text-zinc-400 ml-auto">MetaMask connected</span>
+            <span className="text-[10px] text-zinc-400 ml-auto">MetaMask connected</span>
           </div>
         ) : (
           <button
             onClick={handleConnect}
-            className="w-full py-2 bg-orange-500 hover:bg-orange-400 text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+            className="w-full py-2 bg-orange-500 hover:bg-orange-400 active:scale-[0.98] text-white text-sm font-medium rounded-lg transition-[transform,background-color] duration-150 flex items-center justify-center gap-2"
           >
             🦊 Connect MetaMask
           </button>
@@ -184,7 +184,7 @@ export default function FlowExecutor({ flow, onClose }: Props) {
       </div>
 
       {/* Steps */}
-      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2.5">
+      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
         {steps.map((step, i) => {
           const node = step.node
           const plugin = getPlugin(node.plugin)
@@ -196,22 +196,27 @@ export default function FlowExecutor({ flow, onClose }: Props) {
           return (
             <div
               key={node.id}
-              className={`rounded-xl border p-3 transition-all ${
-                isCurrent ? 'border-blue-300 bg-blue-50'
-                : step.status === 'done' ? 'border-emerald-200 bg-emerald-50/50'
-                : step.status === 'error' ? 'border-red-200 bg-red-50/50'
-                : step.status === 'waiting' ? 'border-amber-200 bg-amber-50/50'
-                : 'border-zinc-200 bg-zinc-50/50'
+              className={`rounded-xl border p-3 transition-[background-color,border-color] duration-300 ${
+                isCurrent           ? 'border-blue-200 bg-blue-50/70'
+                : step.status === 'done'    ? 'border-emerald-200/70 bg-emerald-50/40'
+                : step.status === 'error'   ? 'border-red-200/70 bg-red-50/40'
+                : step.status === 'waiting' ? 'border-amber-200/70 bg-amber-50/40'
+                : 'border-zinc-100 bg-zinc-50/30'
               }`}
             >
               <div className="flex items-start gap-2">
-                <span className="text-base shrink-0 mt-0.5">{plugin?.icon ?? '▸'}</span>
+                <span className="text-base shrink-0 mt-0.5 leading-none">{plugin?.icon ?? '▸'}</span>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-medium text-zinc-800 truncate">{node.label}</span>
-                    <span className={`text-xs font-mono shrink-0 ${STATUS_COLOR[step.status]}`}>
-                      {step.status === 'running' ? '⟳' : STATUS_ICON[step.status]}
-                    </span>
+                    {/* Status indicator */}
+                    {step.status === 'running' ? (
+                      <span className="inline-block w-3 h-3 rounded-full border-2 border-blue-500 border-t-transparent animate-spin shrink-0" />
+                    ) : (
+                      <span className={`text-[10px] font-mono shrink-0 ${STATUS_COLOR[step.status]}`}>
+                        {STATUS_ICON[step.status]}
+                      </span>
+                    )}
                   </div>
                   {plugin && (
                     <span className="text-[10px] text-zinc-400">{plugin.name} · {node.action}</span>
@@ -224,26 +229,26 @@ export default function FlowExecutor({ flow, onClose }: Props) {
               {node.params && Object.keys(node.params).length > 0 && (
                 <div className="mt-2 flex flex-wrap gap-1">
                   {Object.entries(node.params).map(([k, v]) => (
-                    <div key={k} className="bg-zinc-100 rounded px-2 py-0.5">
-                      <span className="text-[10px] text-zinc-500">{k}: </span>
+                    <div key={k} className="bg-zinc-100 rounded-md px-2 py-0.5 border border-zinc-200/60">
+                      <span className="text-[10px] text-zinc-400">{k}: </span>
                       <span className="text-[10px] text-zinc-700 font-mono">{v}</span>
                     </div>
                   ))}
                 </div>
               )}
 
-              {/* Required inputs (only shown for pending/waiting steps) */}
+              {/* Required inputs */}
               {missingInputs.length > 0 && (step.status === 'pending' || step.status === 'waiting') && (
                 <div className="mt-2 space-y-1.5">
                   {missingInputs.map((field) => (
                     <div key={field.key}>
-                      <label className="text-[10px] text-zinc-500 uppercase tracking-wide block mb-0.5">{field.label}</label>
+                      <label className="text-[10px] text-zinc-400 uppercase tracking-wide block mb-0.5">{field.label}</label>
                       <input
                         type="text"
                         placeholder={field.placeholder}
                         value={step.inputs[field.key] ?? ''}
                         onChange={(e) => updateStep(i, { inputs: { ...step.inputs, [field.key]: e.target.value } })}
-                        className="w-full bg-white border border-zinc-300 rounded-lg px-2.5 py-1.5 text-xs text-zinc-900 placeholder-zinc-400 outline-none focus:border-blue-400 transition-colors"
+                        className="w-full bg-white border border-zinc-200 rounded-lg px-2.5 py-1.5 text-xs text-zinc-900 placeholder-zinc-400 outline-none focus:border-blue-400 focus:shadow-[0_0_0_3px_rgba(59,130,246,0.08)] transition-[border-color,box-shadow] duration-150"
                       />
                     </div>
                   ))}
@@ -252,12 +257,12 @@ export default function FlowExecutor({ flow, onClose }: Props) {
 
               {/* Step result */}
               {step.result?.display && (
-                <div className="mt-2 text-xs font-mono text-zinc-600 bg-zinc-100 rounded px-2 py-1 break-all">
+                <div className="mt-2 text-xs font-mono text-zinc-600 bg-zinc-100 rounded-md px-2 py-1.5 break-all border border-zinc-200/60">
                   {step.result.display}
                 </div>
               )}
               {step.result?.error && (
-                <div className="mt-2 text-xs text-red-600 bg-red-50 rounded px-2 py-1">
+                <div className="mt-2 text-xs text-red-600 bg-red-50 rounded-md px-2 py-1.5 border border-red-100">
                   {step.result.error}
                 </div>
               )}
@@ -266,24 +271,24 @@ export default function FlowExecutor({ flow, onClose }: Props) {
                   href={step.result.link ?? `https://etherscan.io/tx/${step.result.txHash}`}
                   target="_blank"
                   rel="noreferrer"
-                  className="mt-1.5 flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800"
+                  className="mt-1.5 flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 transition-colors duration-100"
                 >
                   View transaction ↗
                 </a>
               )}
 
-              {/* Approval / user pick */}
+              {/* Approval */}
               {step.status === 'waiting' && (
                 <div className="mt-3 flex gap-2">
                   <button
                     onClick={() => handleApprove(i)}
-                    className="flex-1 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-lg transition-colors"
+                    className="flex-1 py-1.5 bg-emerald-600 hover:bg-emerald-500 active:scale-[0.97] text-white text-xs font-semibold rounded-lg transition-[transform,background-color] duration-150"
                   >
                     Approve & Continue
                   </button>
                   <button
                     onClick={onClose}
-                    className="px-3 py-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-600 text-xs rounded-lg transition-colors"
+                    className="px-3 py-1.5 bg-zinc-100 hover:bg-zinc-200 active:scale-[0.97] text-zinc-600 text-xs rounded-lg transition-[transform,background-color] duration-150"
                   >
                     Cancel
                   </button>
@@ -295,20 +300,27 @@ export default function FlowExecutor({ flow, onClose }: Props) {
       </div>
 
       {/* Footer */}
-      <div className="px-5 py-4 border-t border-zinc-200 shrink-0">
+      <div className="px-5 py-4 border-t border-zinc-100 shrink-0">
         {isDone ? (
-          <div className="text-center text-sm text-emerald-600 font-semibold">Flow complete ✓</div>
+          <div className="text-center text-sm text-emerald-600 font-semibold animate-fade-up">
+            Flow complete ✓
+          </div>
         ) : !hasStarted ? (
           <button
             onClick={startExecution}
             disabled={!walletAddress || running}
-            className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-xl transition-colors"
+            className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-xl transition-[transform,background-color] duration-150"
           >
             {!walletAddress ? 'Connect wallet to execute' : '⚡ Execute Flow'}
           </button>
         ) : (
           <div className="text-center text-xs text-zinc-400">
-            {running ? 'Executing…' : 'Waiting for approval'}
+            {running ? (
+              <span className="flex items-center justify-center gap-1.5">
+                <span className="inline-block w-3 h-3 rounded-full border-2 border-zinc-400 border-t-transparent animate-spin" />
+                Executing…
+              </span>
+            ) : 'Waiting for approval'}
           </div>
         )}
       </div>

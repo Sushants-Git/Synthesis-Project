@@ -26,7 +26,6 @@ export default function FloatingPrompt({
     inputRef.current?.focus()
   }, [])
 
-  // Close on Escape
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose()
@@ -45,14 +44,12 @@ export default function FloatingPrompt({
     }
   }
 
-  // Keep prompt inside viewport
   const WIDTH = 360
   const left = Math.min(screenX - WIDTH / 2, window.innerWidth - WIDTH - 16)
   const top = Math.max(screenY - 80, 16)
 
   return (
     <>
-      {/* Backdrop - clicking outside closes */}
       <div
         className="fixed inset-0 z-40"
         onPointerDown={(e) => {
@@ -61,10 +58,10 @@ export default function FloatingPrompt({
       />
 
       <div
-        className="floating-prompt fixed z-50 flex flex-col gap-2"
+        className="floating-prompt fixed z-50 flex flex-col gap-2 animate-float-in"
         style={{ left, top, width: WIDTH }}
       >
-        <div className="bg-white border border-zinc-200 rounded-2xl shadow-xl p-3">
+        <div className="bg-white border border-zinc-200 rounded-2xl shadow-xl shadow-zinc-200/60 p-3">
           <div className="flex items-center gap-2 mb-2">
             <span className="text-xs font-medium text-zinc-500 uppercase tracking-wider">
               {mode === 'create' ? 'New Flow' : 'Modify Flow'}
@@ -72,7 +69,7 @@ export default function FloatingPrompt({
             <div className="flex-1" />
             <button
               onClick={onClose}
-              className="text-zinc-400 hover:text-zinc-600 text-sm leading-none"
+              className="text-zinc-400 hover:text-zinc-600 text-sm leading-none transition-colors active:scale-[0.9]"
             >
               ✕
             </button>
@@ -80,7 +77,11 @@ export default function FloatingPrompt({
 
           <textarea
             ref={inputRef}
-            className="w-full bg-zinc-50 border border-zinc-200 rounded-lg px-3 py-2 text-sm text-zinc-900 placeholder-zinc-400 outline-none resize-none min-h-[72px] focus:border-blue-400 transition-colors"
+            className={`w-full bg-zinc-50 border rounded-lg px-3 py-2 text-sm text-zinc-900 placeholder-zinc-400 outline-none resize-none min-h-[72px] transition-[border-color,box-shadow] duration-150 ${
+              loading
+                ? 'border-blue-200 bg-blue-50/40 cursor-not-allowed'
+                : 'border-zinc-200 focus:border-blue-400 focus:shadow-[0_0_0_3px_rgba(59,130,246,0.08)]'
+            }`}
             placeholder={
               mode === 'create'
                 ? 'Describe the transaction flow…'
@@ -93,7 +94,14 @@ export default function FloatingPrompt({
           />
 
           <div className="flex items-center justify-between mt-2">
-            <span className="text-xs text-zinc-400">↵ Generate · Esc Cancel</span>
+            {loading ? (
+              <span className="flex items-center gap-1.5 text-xs text-zinc-400">
+                <span className="inline-block w-3 h-3 rounded-full border-2 border-blue-400 border-t-transparent animate-spin" />
+                Generating…
+              </span>
+            ) : (
+              <span className="text-xs text-zinc-400">↵ Generate · Esc Cancel</span>
+            )}
             <button
               onClick={() => {
                 if (value.trim() && !loading) {
@@ -102,9 +110,9 @@ export default function FloatingPrompt({
                 }
               }}
               disabled={!value.trim() || loading}
-              className="px-3 py-1 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-medium rounded-lg transition-colors"
+              className="px-3 py-1 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-medium rounded-lg transition-[transform,background-color] duration-150 active:scale-[0.96]"
             >
-              {loading ? 'Thinking…' : 'Generate'}
+              Generate
             </button>
           </div>
         </div>
