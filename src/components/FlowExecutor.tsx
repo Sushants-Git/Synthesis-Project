@@ -499,10 +499,10 @@ export default function FlowExecutor({ flow, onClose, onModify }: Props) {
         ) : !hasStarted ? (
           <button
             onClick={startExecution}
-            disabled={!walletAddress || running}
+            disabled={running}
             className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-xl transition-[transform,background-color] duration-150"
           >
-            {!walletAddress ? 'Connect wallet to execute' : '⚡ Execute Flow'}
+            ⚡ Execute Flow
           </button>
         ) : (
           <div className="text-center text-xs text-zinc-400">

@@ -18,7 +18,7 @@ export const ENSPlugin: Plugin = {
       params: [
         { key: 'ens_name', label: 'ENS Name', placeholder: 'vitalik.eth', inputType: 'ens_name', required: true },
       ],
-      outputs: ['resolved_address', 'ens_name'],
+      outputs: ['resolved_address', 'address', 'ens_name'],
     },
     {
       action: 'lookup_address',
@@ -45,12 +45,13 @@ export const ENSPlugin: Plugin = {
 
         // Store under multiple keys so any downstream plugin can find it
         ctx.resolved.resolved_address = address
+        ctx.resolved.address = address
         ctx.resolved.ens_resolved = address
         ctx.resolved.to = address
         ctx.resolved.ens_name = name
         return {
           status: 'done',
-          outputs: { resolved_address: address, ens_name: name, to: address },
+          outputs: { resolved_address: address, address, ens_name: name, to: address },
           display: `${name} → ${address.slice(0, 6)}…${address.slice(-4)}`,
         }
       }

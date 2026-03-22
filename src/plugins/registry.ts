@@ -3,6 +3,7 @@ import { ENSPlugin } from './ens.ts'
 import { StatusNetworkPlugin } from './statusNetwork.ts'
 import { SelfPlugin } from './self.ts'
 import { TwitterPlugin } from './twitter.ts'
+import { GoogleSheetsPlugin } from './googleSheets.ts'
 import type { Plugin, PluginManifest, ExecutionContext, PluginCapability, PluginResult, ParamDef } from './types.ts'
 
 // Re-export types so plugin authors only need to import from one place
@@ -16,6 +17,7 @@ const PLUGINS: Record<string, Plugin> = {
   status: StatusNetworkPlugin,
   self: SelfPlugin,
   twitter: TwitterPlugin,
+  sheets: GoogleSheetsPlugin,
 }
 
 /** Register a plugin instance directly. For built-in plugins or code-defined plugins. */
