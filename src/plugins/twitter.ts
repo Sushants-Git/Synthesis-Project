@@ -19,13 +19,15 @@ async function twitterGet(path: string, params: Record<string, string>): Promise
 export const TwitterPlugin: Plugin = {
   id: 'twitter',
   name: 'Twitter / X',
-  description: 'Search Twitter/X for users by topic, look up handles',
+  description: 'Search Twitter/X for users by topic, look up handles, fetch batch profiles',
   aiDescription:
     'Twitter/X plugin. ' +
     'search_users(query*) → handles[], top_handle — find users by topic, returns sorted handles. ' +
+    'get_profiles(handles[]*) → profiles[], summary — batch profile lookup for a list of handles; returns formatted profile strings. ' +
     'verify_handle(handle*) → handle, name, followers, bio — look up a specific handle. ' +
     'user_approval() — shows upstream handles and waits for user to pick. ' +
-    'Wire: search_users→verify_handle needs wire {"top_handle":"handle"}.',
+    'Wire: search_users→verify_handle needs wire {"top_handle":"handle"}. ' +
+    'Wire: search_users→get_profiles needs wire {"handles":"handles"}.',
   icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 432 384"><path fill="#000000" d="M383 105v11q0 45-16.5 88.5t-47 79.5t-79 58.5T134 365q-73 0-134-39q10 1 21 1q61 0 109-37q-29-1-51.5-18T48 229q8 2 16 2q12 0 23-4q-30-6-50-30t-20-55v-1q19 10 40 11q-39-27-39-73q0-24 12-44q33 40 79.5 64T210 126q-2-10-2-20q0-36 25.5-61.5T295 19q38 0 64 27q30-6 56-21q-10 31-39 48q27-3 51-13q-18 26-44 45z"/></svg>',
   color: 'light-blue',
   category: 'hard',
@@ -55,6 +57,18 @@ export const TwitterPlugin: Plugin = {
         { key: 'name', label: 'Display Name', type: 'string' },
         { key: 'followers', label: 'Followers', type: 'string' },
         { key: 'bio', label: 'Bio', type: 'string' },
+      ],
+    },
+    {
+      action: 'get_profiles',
+      label: 'Get Profiles',
+      description: 'Batch fetch profile info for a list of Twitter handles',
+      inputs: [
+        { key: 'handles', label: 'Twitter Handles', type: 'string[]', required: true, placeholder: '@vitalikbuterin, @naval' },
+      ],
+      outputs: [
+        { key: 'profiles', label: 'Profile Strings', type: 'string[]' },
+        { key: 'summary', label: 'Summary', type: 'string' },
       ],
     },
     {
@@ -145,6 +159,50 @@ export const TwitterPlugin: Plugin = {
             bio: u.description ?? '',
           },
           display: `@${u.username} — ${u.name} (${followers.toLocaleString()} followers)`,
+        }
+      }
+
+      case 'get_profiles': {
+        const rawHandles = inputs.handles
+        if (!rawHandles || (Array.isArray(rawHandles) && rawHandles.length === 0)) {
+          return { status: 'error', error: 'Handles array required' }
+        }
+        const handleList = (Array.isArray(rawHandles) ? rawHandles : [rawHandles as string])
+          .map((h) => h.replace(/^@/, ''))
+          .slice(0, 100) // Twitter API limit
+
+        let data: {
+          data?: Array<{ id: string; username: string; name: string; description?: string; public_metrics?: { followers_count: number } }>
+          errors?: Array<{ detail: string }>
+        }
+
+        try {
+          data = await twitterGet('/2/users/by', {
+            usernames: handleList.join(','),
+            'user.fields': 'public_metrics,description',
+          }) as typeof data
+        } catch (e) {
+          return { status: 'error', error: e instanceof Error ? e.message : String(e) }
+        }
+
+        const users = data.data ?? []
+        if (users.length === 0) {
+          return { status: 'done', outputs: { profiles: [], summary: 'No profiles found' }, display: 'No profiles found' }
+        }
+
+        const profiles = users.map((u) => {
+          const followers = u.public_metrics?.followers_count ?? 0
+          const bio = u.description ? ` | Bio: ${u.description.slice(0, 100)}` : ''
+          return `@${u.username} (${u.name}) | ${followers.toLocaleString()} followers${bio}`
+        })
+
+        return {
+          status: 'done',
+          outputs: {
+            profiles,
+            summary: `Fetched ${users.length} profiles`,
+          },
+          display: `Fetched ${users.length} profile${users.length !== 1 ? 's' : ''}`,
         }
       }
 

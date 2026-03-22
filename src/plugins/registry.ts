@@ -4,6 +4,7 @@ import { StatusNetworkPlugin } from './statusNetwork.ts'
 import { SelfPlugin } from './self.ts'
 import { TwitterPlugin } from './twitter.ts'
 import { GoogleSheetsPlugin } from './googleSheets.ts'
+import { ChatGPTPlugin } from './chatgpt.ts'
 import {
   loadSoftPlugins as _loadSoftPlugins,
   buildSoftPlugin,
@@ -27,6 +28,7 @@ const HARD_PLUGINS: Record<string, Plugin> = {
   self: { ...SelfPlugin, category: 'hard' },
   twitter: { ...TwitterPlugin, category: 'hard' },
   sheets: { ...GoogleSheetsPlugin, category: 'hard' },
+  chatgpt: { ...ChatGPTPlugin, category: 'hard' },
 }
 
 const PLUGINS: Record<string, Plugin> = { ...HARD_PLUGINS }

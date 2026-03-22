@@ -89,6 +89,10 @@ WIRE REFERENCE (required when keys differ):
 - sheets:fetch_rows → ens:resolve_batch: wire {"rows":"names"}
 - sheets:fetch_rows → metamask:batch_send: wire {"rows":"recipients"}
 - twitter:search_users → twitter:verify_handle: wire {"top_handle":"handle"}
+- twitter:search_users → twitter:get_profiles: wire {"handles":"handles"} (auto-matched by name)
+- twitter:get_profiles → chatgpt:process: wire {"profiles":"items"}
+- sheets:fetch_rows → chatgpt:process: wire {"rows":"items"}
+- chatgpt:process → system:output: auto-matched
 
 RULES:
 1. Put all user-specified values (amounts, addresses, names, URLs) in params.
@@ -118,7 +122,15 @@ edges: n1→n2 wire{"rows":"names"}, n2→n3, n3→n4 wire{"addresses":"recipien
 
 "resolve vitalik.eth then reverse-lookup that address":
 nodes: n1:ens:resolve_name(name:"vitalik.eth"), n2:ens:lookup_address, n3:system:output
-edges: n1→n2 (auto-matched: both use "address"), n2→n3`
+edges: n1→n2 (auto-matched: both use "address"), n2→n3
+
+"find ZK builders on Twitter and score them with ChatGPT":
+nodes: n1:twitter:search_users(query:"ZK builder"), n2:twitter:get_profiles, n3:chatgpt:process(prompt:"Score each builder out of 10. Return JSON array."), n4:system:output
+edges: n1→n2 wire{"handles":"handles"}, n2→n3 wire{"profiles":"items"}, n3→n4
+
+"fetch Twitter handles from Google Sheet and score with GPT":
+nodes: n1:sheets:fetch_rows(sheet_url:"...",column_name:"handle"), n2:twitter:get_profiles, n3:chatgpt:process(prompt:"Score each profile out of 10. Return JSON array."), n4:system:output
+edges: n1→n2 wire{"rows":"handles"}, n2→n3 wire{"profiles":"items"}, n3→n4`
 }
 
 function extractJSON(text: string): string {
