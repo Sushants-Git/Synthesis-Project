@@ -41,7 +41,7 @@ export type ParseResult =
   | { type: 'message'; content: string }
 
 function buildSystemPrompt(): string {
-  return `You are FlowTx — a visual blockchain transaction flow builder. Convert a natural language intent into a JSON flow spec using the available plugins.
+  return `You are canvii — a visual blockchain transaction flow builder. Convert a natural language intent into a JSON flow spec using the available plugins.
 
 RESPONSE RULES:
 - If intent is clear → respond ONLY with valid JSON (no markdown fences, no explanation text whatsoever).

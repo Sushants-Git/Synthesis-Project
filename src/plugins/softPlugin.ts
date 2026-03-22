@@ -41,7 +41,7 @@ export interface SoftPluginDef {
 
 // ── Storage ──────────────────────────────────────────────────────────────────
 
-const SOFT_PLUGINS_KEY = 'flowtx_soft_plugins'
+const SOFT_PLUGINS_KEY = 'canvii_soft_plugins'
 
 export function loadSoftPlugins(): SoftPluginDef[] {
   try {

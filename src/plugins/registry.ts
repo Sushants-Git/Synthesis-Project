@@ -17,7 +17,7 @@ export type { SoftPluginDef }
 // Re-export types so plugin authors only need to import from one place
 export type { Plugin, PluginManifest, ExecutionContext, PluginCapability, PluginResult, ParamDef }
 
-const STORAGE_KEY = 'flowtx_custom_plugins'
+const STORAGE_KEY = 'canvii_custom_plugins'
 
 // Hard plugins: built-in, code-defined
 const HARD_PLUGINS: Record<string, Plugin> = {
@@ -163,7 +163,7 @@ export function createPlugin(
   }
 }
 
-const VAR_DEFAULTS_KEY = 'flowtx_var_defaults'
+const VAR_DEFAULTS_KEY = 'canvii_var_defaults'
 
 /** Persist template variable values so the modal and executor can pre-fill them. */
 export function saveVarDefaults(vars: Record<string, string>): void {
