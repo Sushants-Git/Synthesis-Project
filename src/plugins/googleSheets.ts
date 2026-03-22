@@ -93,18 +93,27 @@ export const GoogleSheetsPlugin: Plugin = {
         )
         .filter((row) => row.some((v) => v !== ''))
 
-      // Flat list from a specific column — defaults to first column
+      // Flat list from a specific column — auto-detect address column if not specified
       const columnName = params.column_name ?? ctx.inputs.column_name
-      const colIndex = columnName
-        ? headers.findIndex((h) => h.toLowerCase() === columnName.toLowerCase())
-        : 0
-      const resolvedColIndex = colIndex === -1 ? 0 : colIndex
-      if (columnName && colIndex === -1) {
-        return {
-          status: 'error',
-          error: `Column "${columnName}" not found. Available columns: ${headers.join(', ')}`,
+      let resolvedColIndex: number
+
+      if (columnName) {
+        const colIndex = headers.findIndex((h) => h.toLowerCase() === columnName.toLowerCase())
+        if (colIndex === -1) {
+          return {
+            status: 'error',
+            error: `Column "${columnName}" not found. Available columns: ${headers.join(', ')}`,
+          }
         }
+        resolvedColIndex = colIndex
+      } else {
+        // Auto-detect: find the first column whose values look like Ethereum addresses (0x...)
+        const addressColIndex = headers.findIndex((_, j) =>
+          bodyRows.some((row) => (row[j] ?? '').startsWith('0x') && (row[j] ?? '').length >= 40),
+        )
+        resolvedColIndex = addressColIndex !== -1 ? addressColIndex : 0
       }
+
       const firstColValues = bodyRows.map((row) => row[resolvedColIndex] ?? '').filter(Boolean)
 
       // Full 2D table with header row for display
