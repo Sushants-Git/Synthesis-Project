@@ -135,8 +135,9 @@ export async function executeSoftPlugin(
       let result: Record<string, unknown>
       try {
         // eslint-disable-next-line no-new-func
-        const fn = new Function('response', 'vars', step.transform)
-        result = (fn(data, { ...vars }) as Record<string, unknown>) ?? {}
+        const fn = new Function('response', 'vars', 'console', step.transform)
+        // Pass real console so console.log works during execution
+        result = (fn(data, { ...vars }, console) as Record<string, unknown>) ?? {}
       } catch (e) {
         return {
           status: 'error',

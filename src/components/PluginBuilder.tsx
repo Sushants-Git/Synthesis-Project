@@ -129,6 +129,7 @@ function StepEditor({
   const [testError, setTestError] = useState<string | null>(null)
   const [transformResult, setTransformResult] = useState<Record<string, unknown> | null>(null)
   const [transformError, setTransformError] = useState<string | null>(null)
+  const [transformLogs, setTransformLogs] = useState<string[]>([])
   const [activeTab, setActiveTab] = useState<'headers' | 'body' | 'transform'>('headers')
   const [pendingMap, setPendingMap] = useState<{ path: string; key: string } | null>(null)
 
@@ -160,14 +161,7 @@ function StepEditor({
 
       // Run transform preview if one is written
       if (step.transform?.trim() && parsed !== null) {
-        try {
-          // eslint-disable-next-line no-new-func
-          const fn = new Function('response', 'vars', step.transform)
-          const result = (fn(parsed, {}) as Record<string, unknown>) ?? {}
-          setTransformResult(result)
-        } catch (e) {
-          setTransformError(e instanceof Error ? e.message : String(e))
-        }
+        execTransform(parsed)
       }
     } catch (e) {
       setTestError(e instanceof Error ? e.message : String(e))
@@ -176,18 +170,38 @@ function StepEditor({
     }
   }
 
-  const runTransformPreview = () => {
-    if (!response || !step.transform?.trim()) return
+  /** Run the transform code against a response value, capture console output. */
+  const execTransform = (data: unknown) => {
     setTransformError(null)
     setTransformResult(null)
+    setTransformLogs([])
+    if (!step.transform?.trim()) return
+
+    const logs: string[] = []
+    const fmt = (...args: unknown[]) =>
+      args.map((a) => (typeof a === 'string' ? a : JSON.stringify(a, null, 2))).join(' ')
+    const mockConsole = {
+      log: (...args: unknown[]) => logs.push(fmt(...args)),
+      warn: (...args: unknown[]) => logs.push('[warn] ' + fmt(...args)),
+      error: (...args: unknown[]) => logs.push('[error] ' + fmt(...args)),
+      info: (...args: unknown[]) => logs.push('[info] ' + fmt(...args)),
+    }
+
     try {
       // eslint-disable-next-line no-new-func
-      const fn = new Function('response', 'vars', step.transform)
-      const result = (fn(response, {}) as Record<string, unknown>) ?? {}
+      const fn = new Function('response', 'vars', 'console', step.transform)
+      const result = (fn(data, {}, mockConsole) as Record<string, unknown>) ?? {}
       setTransformResult(result)
     } catch (e) {
       setTransformError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setTransformLogs(logs)
     }
+  }
+
+  const runTransformPreview = () => {
+    if (!response || !step.transform?.trim()) return
+    execTransform(response)
   }
 
   const handleMapPath = useCallback(
@@ -413,28 +427,63 @@ function StepEditor({
               )}
             </div>
 
-            {/* Transform result preview */}
-            {transformError && (
-              <div className="text-[10px] text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 font-mono">
-                {transformError}
+            {/* Console logs */}
+            {transformLogs.length > 0 && (
+              <div className="bg-zinc-900 border border-zinc-700 rounded-lg p-3 space-y-0.5">
+                <div className="text-[9px] text-zinc-500 uppercase tracking-widest font-medium mb-1.5">
+                  Console
+                </div>
+                {transformLogs.map((line, i) => (
+                  <pre
+                    key={i}
+                    className={`text-[10px] font-mono whitespace-pre-wrap break-all leading-relaxed ${
+                      line.startsWith('[error]')
+                        ? 'text-red-400'
+                        : line.startsWith('[warn]')
+                        ? 'text-amber-400'
+                        : 'text-emerald-400'
+                    }`}
+                  >
+                    {line}
+                  </pre>
+                ))}
               </div>
             )}
+
+            {/* Transform error */}
+            {transformError && (
+              <div className="bg-red-950 border border-red-800 rounded-lg px-3 py-2">
+                <div className="text-[9px] text-red-400 uppercase tracking-widest font-medium mb-1">Error</div>
+                <pre className="text-[10px] text-red-300 font-mono whitespace-pre-wrap break-all">
+                  {transformError}
+                </pre>
+              </div>
+            )}
+
+            {/* Transform result */}
             {transformResult && (
               <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3">
                 <div className="text-[9px] text-emerald-600 uppercase tracking-widest font-medium mb-2">
                   Output keys ({Object.keys(transformResult).length})
                 </div>
                 <div className="space-y-1">
-                  {Object.entries(transformResult).map(([k, v]) => (
-                    <div key={k} className="flex items-start gap-2">
-                      <code className="text-[10px] font-mono text-emerald-700 shrink-0">{k}:</code>
-                      <span className="text-[10px] font-mono text-zinc-600 break-all">
-                        {typeof v === 'string'
-                          ? `"${v.slice(0, 80)}${v.length > 80 ? '…' : ''}"`
-                          : JSON.stringify(v).slice(0, 80)}
-                      </span>
-                    </div>
-                  ))}
+                  {Object.entries(transformResult).map(([k, v]) => {
+                    let display: string
+                    if (v === undefined) display = 'undefined'
+                    else if (v === null) display = 'null'
+                    else if (typeof v === 'string') display = `"${v.slice(0, 120)}${v.length > 120 ? '…' : ''}"`
+                    else display = (JSON.stringify(v) ?? 'undefined').slice(0, 120)
+                    const isUndefined = v === undefined
+                    return (
+                      <div key={k} className="flex items-start gap-2">
+                        <code className="text-[10px] font-mono text-emerald-700 shrink-0">{k}:</code>
+                        <span className={`text-[10px] font-mono break-all ${isUndefined ? 'text-amber-500' : 'text-zinc-600'}`}>
+                          {display}
+                          {isUndefined && <span className="ml-1 text-[9px] text-amber-400">(key exists but value is undefined)</span>}
+                        </span>
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
             )}
