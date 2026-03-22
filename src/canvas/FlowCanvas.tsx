@@ -242,9 +242,14 @@ export default function FlowCanvas() {
   const openExecute = useCallback((btn: FrameButtonPos) => {
     const flow = flowSpecMap.get(btn.frameId)
     if (flow) {
-      setExecutingFlow(flow)
-      setExecutingFrameId(btn.frameId)
-      setShowStylePanel(false)
+      // Reset first so FlowExecutor fully remounts when switching between flows
+      setExecutingFlow(null)
+      setExecutingFrameId(null)
+      requestAnimationFrame(() => {
+        setExecutingFlow(flow)
+        setExecutingFrameId(btn.frameId)
+        setShowStylePanel(false)
+      })
     }
   }, [])
 
