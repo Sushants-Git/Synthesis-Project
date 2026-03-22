@@ -20,13 +20,13 @@ A visual, AI-powered transaction builder where users describe intent in plain En
 
 ## Phases
 
-### Phase 0 — Foundation ✅ (in progress)
+### Phase 0 — Foundation ✅ (done)
 - [x] Register for hackathon
 - [x] Create repo structure docs (agents.md, plan.md)
-- [ ] Scaffold Vite + React + Tailwind project
-- [ ] Set up ESLint, TypeScript, Prettier
-- [ ] Create AI abstraction layer (OpenAI + Claude switchable)
-- [ ] Basic project deploys and runs locally
+- [x] Scaffold Vite + React + Tailwind project
+- [x] Create AI abstraction layer (OpenAI + Claude switchable)
+- [x] Basic project builds (npm run build passes)
+- [ ] Add .env with real API keys and test locally
 
 ### Phase 1 — Canvas Core
 - [ ] Integrate tldraw (or Excalidraw) into the app
