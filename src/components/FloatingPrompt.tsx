@@ -64,15 +64,15 @@ export default function FloatingPrompt({
         className="floating-prompt fixed z-50 flex flex-col gap-2"
         style={{ left, top, width: WIDTH }}
       >
-        <div className="bg-zinc-900/95 backdrop-blur-md border border-zinc-700 rounded-2xl shadow-2xl p-3">
+        <div className="bg-white border border-zinc-200 rounded-2xl shadow-xl p-3">
           <div className="flex items-center gap-2 mb-2">
-            <span className="text-xs font-medium text-zinc-400 uppercase tracking-wider">
+            <span className="text-xs font-medium text-zinc-500 uppercase tracking-wider">
               {mode === 'create' ? 'New Flow' : 'Modify Flow'}
             </span>
             <div className="flex-1" />
             <button
               onClick={onClose}
-              className="text-zinc-600 hover:text-zinc-400 text-sm leading-none"
+              className="text-zinc-400 hover:text-zinc-600 text-sm leading-none"
             >
               ✕
             </button>
@@ -80,7 +80,7 @@ export default function FloatingPrompt({
 
           <textarea
             ref={inputRef}
-            className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-100 placeholder-zinc-500 outline-none resize-none min-h-[72px]"
+            className="w-full bg-zinc-50 border border-zinc-200 rounded-lg px-3 py-2 text-sm text-zinc-900 placeholder-zinc-400 outline-none resize-none min-h-[72px] focus:border-blue-400 transition-colors"
             placeholder={
               mode === 'create'
                 ? 'Describe the transaction flow…'
@@ -93,7 +93,7 @@ export default function FloatingPrompt({
           />
 
           <div className="flex items-center justify-between mt-2">
-            <span className="text-xs text-zinc-600">↵ Generate · Esc Cancel</span>
+            <span className="text-xs text-zinc-400">↵ Generate · Esc Cancel</span>
             <button
               onClick={() => {
                 if (value.trim() && !loading) {
@@ -111,7 +111,7 @@ export default function FloatingPrompt({
 
         {/* Tail */}
         <div
-          className="w-2 h-2 bg-zinc-700 rotate-45 mx-auto -mt-3"
+          className="w-2 h-2 bg-zinc-200 rotate-45 mx-auto -mt-3"
           style={{ marginLeft: WIDTH / 2 - 4 }}
         />
       </div>

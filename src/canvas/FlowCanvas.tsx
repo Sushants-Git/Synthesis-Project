@@ -160,9 +160,9 @@ export default function FlowCanvas() {
 
         {/* Error toast */}
         {error && (
-          <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-red-900/90 border border-red-700 text-red-200 text-sm px-4 py-2 rounded-lg shadow-lg max-w-md text-center">
+          <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-2 rounded-lg shadow-lg max-w-md text-center">
             {error}
-            <button className="ml-3 text-red-400 hover:text-red-200" onClick={() => setError(null)}>✕</button>
+            <button className="ml-3 text-red-400 hover:text-red-600" onClick={() => setError(null)}>✕</button>
           </div>
         )}
 
@@ -180,7 +180,7 @@ export default function FlowCanvas() {
             </button>
             <button
               onClick={openModify}
-              className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-600 text-zinc-200 text-xs font-medium rounded-lg shadow-lg transition-colors"
+              className="px-3 py-1.5 bg-white hover:bg-zinc-50 border border-zinc-300 text-zinc-700 text-xs font-medium rounded-lg shadow-lg transition-colors"
             >
               Modify
             </button>
@@ -223,7 +223,7 @@ export default function FlowCanvas() {
 
         {/* Canvas hints */}
         {!promptState && !executingFlow && (
-          <div className="fixed bottom-4 right-4 z-30 text-xs text-zinc-600 text-right space-y-0.5 pointer-events-none select-none">
+          <div className="fixed bottom-4 right-4 z-30 text-xs text-zinc-400 text-right space-y-0.5 pointer-events-none select-none">
             <div>F → draw frame → describe flow</div>
             <div>double-click canvas → quick prompt</div>
             <div>select flow → ⚡ Execute</div>

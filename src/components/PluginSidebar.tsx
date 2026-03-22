@@ -32,16 +32,16 @@ export default function PluginSidebar({ onPrompt }: Props) {
   const [expanded, setExpanded] = useState<string | null>(null)
 
   return (
-    <div className="fixed left-0 top-0 h-full w-56 z-30 flex flex-col bg-zinc-950/95 backdrop-blur border-r border-zinc-800 overflow-y-auto">
+    <div className="fixed left-0 top-0 h-full w-56 z-30 flex flex-col bg-white border-r border-zinc-200 overflow-y-auto">
       {/* Header */}
-      <div className="px-4 py-3 border-b border-zinc-800 shrink-0">
-        <div className="text-xs font-bold text-zinc-200 tracking-widest uppercase">FlowTx</div>
-        <div className="text-[10px] text-zinc-600 mt-0.5">visual tx builder</div>
+      <div className="px-4 py-3 border-b border-zinc-200 shrink-0">
+        <div className="text-xs font-bold text-zinc-900 tracking-widest uppercase">FlowTx</div>
+        <div className="text-[10px] text-zinc-400 mt-0.5">visual tx builder</div>
       </div>
 
       {/* Plugins */}
       <div className="px-3 pt-3 pb-2">
-        <div className="text-[10px] text-zinc-600 uppercase tracking-wider mb-2 px-1">Plugins</div>
+        <div className="text-[10px] text-zinc-400 uppercase tracking-wider mb-2 px-1">Plugins</div>
         <div className="space-y-1">
           {PLUGIN_LIST.map((plugin) => {
             const isOpen = expanded === plugin.id
@@ -50,20 +50,20 @@ export default function PluginSidebar({ onPrompt }: Props) {
               <div key={plugin.id}>
                 <button
                   onClick={() => setExpanded(isOpen ? null : plugin.id)}
-                  className="w-full flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-zinc-800/70 transition-colors text-left group"
+                  className="w-full flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-zinc-100 transition-colors text-left group"
                 >
                   <span className="text-base shrink-0">{plugin.icon}</span>
                   <div className="flex-1 min-w-0">
-                    <div className="text-xs font-medium text-zinc-300 group-hover:text-zinc-100 truncate">
+                    <div className="text-xs font-medium text-zinc-700 group-hover:text-zinc-900 truncate">
                       {plugin.name}
                     </div>
                     {plugin.prizeTrack && (
-                      <div className="text-[9px] text-zinc-600 truncate leading-tight">
+                      <div className="text-[9px] text-zinc-400 truncate leading-tight">
                         🏆 {plugin.prizeTrack.split('(')[0].trim()}
                       </div>
                     )}
                   </div>
-                  <span className={`text-zinc-600 text-xs transition-transform ${isOpen ? 'rotate-90' : ''}`}>›</span>
+                  <span className={`text-zinc-400 text-xs transition-transform ${isOpen ? 'rotate-90' : ''}`}>›</span>
                 </button>
 
                 {isOpen && (
@@ -71,10 +71,10 @@ export default function PluginSidebar({ onPrompt }: Props) {
                     <p className="text-[10px] text-zinc-500 leading-snug">{plugin.description}</p>
 
                     <div className="space-y-1">
-                      <div className="text-[9px] text-zinc-600 uppercase tracking-wider">Capabilities</div>
+                      <div className="text-[9px] text-zinc-400 uppercase tracking-wider">Capabilities</div>
                       {plugin.capabilities.map((cap) => (
                         <div key={cap.action} className="text-[10px] text-zinc-500 flex items-start gap-1">
-                          <span className="text-zinc-700 shrink-0">·</span>
+                          <span className="text-zinc-300 shrink-0">·</span>
                           <span>{cap.label}</span>
                         </div>
                       ))}
@@ -82,12 +82,12 @@ export default function PluginSidebar({ onPrompt }: Props) {
 
                     {examples.length > 0 && (
                       <div className="space-y-1">
-                        <div className="text-[9px] text-zinc-600 uppercase tracking-wider">Try</div>
+                        <div className="text-[9px] text-zinc-400 uppercase tracking-wider">Try</div>
                         {examples.map((ex) => (
                           <button
                             key={ex}
                             onClick={() => onPrompt(ex)}
-                            className="w-full text-left text-[10px] text-blue-400 hover:text-blue-300 leading-snug py-0.5 transition-colors"
+                            className="w-full text-left text-[10px] text-blue-600 hover:text-blue-800 leading-snug py-0.5 transition-colors"
                           >
                             "{ex}"
                           </button>
@@ -103,22 +103,22 @@ export default function PluginSidebar({ onPrompt }: Props) {
       </div>
 
       {/* Divider */}
-      <div className="border-t border-zinc-800 mx-3 my-2" />
+      <div className="border-t border-zinc-200 mx-3 my-2" />
 
       {/* Hints */}
       <div className="px-4 pb-4 space-y-2">
-        <div className="text-[9px] text-zinc-600 uppercase tracking-wider">How to use</div>
-        <div className="space-y-1.5 text-[10px] text-zinc-600">
+        <div className="text-[9px] text-zinc-400 uppercase tracking-wider">How to use</div>
+        <div className="space-y-1.5 text-[10px] text-zinc-500">
           <div className="flex items-start gap-1.5">
-            <span className="text-zinc-700 shrink-0 mt-0.5">F</span>
+            <span className="text-zinc-400 shrink-0 mt-0.5">F</span>
             <span>draw a frame on canvas to place a flow</span>
           </div>
           <div className="flex items-start gap-1.5">
-            <span className="text-zinc-700 shrink-0 mt-0.5">⌨</span>
+            <span className="text-zinc-400 shrink-0 mt-0.5">⌨</span>
             <span>double-click empty canvas for quick prompt</span>
           </div>
           <div className="flex items-start gap-1.5">
-            <span className="text-zinc-700 shrink-0 mt-0.5">⚡</span>
+            <span className="text-zinc-400 shrink-0 mt-0.5">⚡</span>
             <span>select a flow frame → Execute</span>
           </div>
         </div>
