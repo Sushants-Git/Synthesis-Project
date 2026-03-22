@@ -49,6 +49,8 @@ export interface Plugin {
   icon: string
   /** tldraw color token */
   color: string
+  /** 'hard' = built-in code plugin; 'soft' = user-built API chain */
+  category?: 'hard' | 'soft'
   /** Prize track this plugin targets */
   prizeTrack?: string
   /**

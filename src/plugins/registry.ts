@@ -4,21 +4,32 @@ import { StatusNetworkPlugin } from './statusNetwork.ts'
 import { SelfPlugin } from './self.ts'
 import { TwitterPlugin } from './twitter.ts'
 import { GoogleSheetsPlugin } from './googleSheets.ts'
+import {
+  loadSoftPlugins as _loadSoftPlugins,
+  buildSoftPlugin,
+  saveSoftPlugin,
+  deleteSoftPlugin,
+} from './softPlugin.ts'
 import type { Plugin, PluginManifest, ExecutionContext, PluginCapability, PluginResult, ParamDef } from './types.ts'
+import type { SoftPluginDef } from './softPlugin.ts'
+export type { SoftPluginDef }
 
 // Re-export types so plugin authors only need to import from one place
 export type { Plugin, PluginManifest, ExecutionContext, PluginCapability, PluginResult, ParamDef }
 
 const STORAGE_KEY = 'flowtx_custom_plugins'
 
-const PLUGINS: Record<string, Plugin> = {
-  metamask: MetaMaskPlugin,
-  ens: ENSPlugin,
-  status: StatusNetworkPlugin,
-  self: SelfPlugin,
-  twitter: TwitterPlugin,
-  sheets: GoogleSheetsPlugin,
+// Hard plugins: built-in, code-defined
+const HARD_PLUGINS: Record<string, Plugin> = {
+  metamask: { ...MetaMaskPlugin, category: 'hard' },
+  ens: { ...ENSPlugin, category: 'hard' },
+  status: { ...StatusNetworkPlugin, category: 'hard' },
+  self: { ...SelfPlugin, category: 'hard' },
+  twitter: { ...TwitterPlugin, category: 'hard' },
+  sheets: { ...GoogleSheetsPlugin, category: 'hard' },
 }
+
+const PLUGINS: Record<string, Plugin> = { ...HARD_PLUGINS }
 
 /** Register a plugin instance directly. For built-in plugins or code-defined plugins. */
 export function registerPlugin(plugin: Plugin): void {
@@ -114,6 +125,24 @@ export function loadPersistedPlugins(): void {
   for (const manifest of loadSavedManifests()) {
     PLUGINS[manifest.id] = loadPluginManifest(manifest)
   }
+  for (const def of _loadSoftPlugins()) {
+    PLUGINS[def.id] = buildSoftPlugin(def)
+  }
+}
+
+/** Returns the list of soft plugin defs from storage (for the sidebar to render). */
+export { _loadSoftPlugins as loadSoftPluginDefs }
+
+/** Register a soft plugin (save to storage + live registry). */
+export function registerSoftPlugin(def: SoftPluginDef): void {
+  saveSoftPlugin(def)
+  PLUGINS[def.id] = buildSoftPlugin(def)
+}
+
+/** Remove a soft plugin by id. */
+export function removeSoftPluginById(id: string): void {
+  deleteSoftPlugin(id)
+  delete PLUGINS[id]
 }
 
 function persistManifest(manifest: PluginManifest): void {
