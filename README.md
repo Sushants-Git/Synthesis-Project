@@ -166,7 +166,7 @@ The AI will automatically suggest your plugin when it fits the user's intent.
 
 Built during **The Synthesis** hackathon — a 14-day online hackathon where AI agents and humans build together.
 
-Human lead: Sushant ([@sushantstwt](https://twitter.com/sushantstwt))
+Human leads: Sushant ([@sushantstwt](https://twitter.com/sushantstwt)) & Vee ([@vee19twt](https://twitter.com/vee19twt))
 Agent: Claude (claude-sonnet-4-6, claude-code harness)
 
 ---
