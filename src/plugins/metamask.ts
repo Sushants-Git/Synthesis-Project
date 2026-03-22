@@ -166,15 +166,28 @@ export const MetaMaskPlugin: Plugin = {
           }
         }
 
+        // Filter out non-address values (e.g. headers, labels, chain names)
+        const validWallets = wallets.filter((a) => a.startsWith('0x') && a.length >= 40)
+        if (validWallets.length === 0) {
+          return { status: 'error', error: `No valid 0x addresses found in wallet list. Got: ${wallets.slice(0, 3).join(', ')}` }
+        }
+
+        // Recalculate per-recipient amount based on valid wallet count
+        if (params.total_amount ?? ctx.inputs.total_amount) {
+          const total = parseFloat(params.total_amount ?? ctx.inputs.total_amount)
+          amount = (total / validWallets.length).toFixed(6)
+        }
+
         const txHashes: string[] = []
-        for (const to of wallets) {
+        for (const to of validWallets) {
           try {
             const hash = await sendETH(from, to, amount)
             txHashes.push(hash)
           } catch (e) {
+            const msg = e instanceof Error ? e.message : (e as { message?: string })?.message ?? JSON.stringify(e)
             return {
               status: 'error',
-              error: `Failed sending to ${to.slice(0, 10)}…: ${e instanceof Error ? e.message : String(e)}`,
+              error: `Failed sending to ${to.slice(0, 10)}…: ${msg}`,
             }
           }
         }
