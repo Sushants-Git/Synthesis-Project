@@ -703,6 +703,37 @@ localStorage keys were left as-is to avoid wiping all saved flows.
 
 ---
 
+**USER:** in production vercel it's saying "The page could not be found — NOT_FOUND"
+
+**ASSISTANT:** Yes — Vite's `server.proxy` only runs in dev. In production (Vercel), `/api/*` hits nothing. Created Vercel serverless functions that replicate the same proxy behaviour:
+
+- `api/twitter/[...path].ts` → proxies to `https://api.twitter.com` with Bearer token
+- `api/openai/[...path].ts` → proxies to `https://api.openai.com` with API key
+- `api/claude/[...path].ts` → proxies to `https://api.anthropic.com` with API key
+- `api/github/[...path].ts` → proxies to `https://api.github.com` with token
+
+Added `vercel.json` with `buildCommand`, `outputDirectory`, and `framework: "vite"`.
+
+---
+
+**USER:** still having the same issue
+
+**ASSISTANT:** Root cause: TypeScript files in `api/` were excluded by `tsconfig.app.json` (`"include": ["src"]`) so Vercel never compiled them. Also `framework: "vite"` was potentially conflicting with routing.
+
+Fixed:
+1. **Converted to plain `.js`** — no compilation needed, Vercel runs them directly
+2. **Flat files** (`api/openai.js` etc.) instead of subdirectories with catch-all — simpler routing
+3. **Explicit `rewrites`** in `vercel.json` — `/api/openai/**` → `/api/openai`, `/api/claude/**` → `/api/claude`, etc., then SPA catch-all `/(.*) → /index.html` at the end
+4. **Removed `"framework": "vite"`** from vercel.json
+
+---
+
+**USER:** can you add these also to the conversation
+
+**ASSISTANT:** Done — this entry.
+
+---
+
 ## Summary
 
 **Project:** CAN VVEE — Visual AI-powered flow builder for blockchain transactions
