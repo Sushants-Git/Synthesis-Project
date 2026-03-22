@@ -101,6 +101,11 @@ edges: n1→n2 label:"address", n2→n3 label:"address", n3→n4 label:"tx_hash"
 n1:sheets:fetch_rows(sheet_url:"...") → n2:metamask:approve → n3:metamask:batch_send(amount:"0.01") → n4:system:output
 edges: n1→n2 label:"wallets", n2→n3 label:"wallets", n3→n4 label:"sent_count"
 
+"fetch ENS names from Google Sheet and resolve them to addresses":
+n1:sheets:fetch_rows(sheet_url:"...") → n2:ens:resolve_batch → n3:system:output
+edges: n1→n2 label:"rows", n2→n3 label:"addresses"
+NOTE: use ens:resolve_batch (not resolve_name) whenever the input is a list of ENS names from sheets or any array source.
+
 "resolve vitalik.eth then look up the ENS name for that address":
 n1:ens:resolve_name(ens_name:"vitalik.eth") → n2:ens:lookup_address → n3:system:output
 edges: n1→n2 label:"address", n2→n3 label:"ens_name"`

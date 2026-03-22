@@ -6,7 +6,13 @@ export const ENSPlugin: Plugin = {
   name: 'ENS',
   description: 'Resolve ENS names to addresses and replace hex addresses in the UX',
   aiDescription:
-    'ENS (Ethereum Name Service) integration. Actions: resolve_name (convert an ENS name like "vitalik.eth" to a hex address — always use this before sending to an ENS name), lookup_address (reverse lookup: get the ENS name for a hex address, useful for displaying human-readable identities). Use ENS names wherever possible — never show raw hex addresses to users.',
+    'ENS (Ethereum Name Service) integration. ' +
+    'Actions: ' +
+    'resolve_name (single ENS name → address, e.g. "vitalik.eth" → "0x…"), ' +
+    'resolve_batch (array of ENS names → array of addresses — use this when upstream rows/wallets is a list of ENS names, e.g. from sheets:fetch_rows), ' +
+    'lookup_address (reverse: hex address → ENS name). ' +
+    'Use resolve_batch when piping a list from Google Sheets. ' +
+    'Use resolve_name for a single known name.',
   icon: '🔷',
   color: 'blue',
   prizeTrack: 'ENS Identity + Communication + Open Integration (up to $1,100)',
@@ -14,11 +20,20 @@ export const ENSPlugin: Plugin = {
     {
       action: 'resolve_name',
       label: 'Resolve ENS Name',
-      description: 'Convert an ENS name to a wallet address',
+      description: 'Convert a single ENS name to a wallet address',
       params: [
         { key: 'ens_name', label: 'ENS Name', placeholder: 'vitalik.eth', inputType: 'ens_name', required: true },
       ],
       outputs: ['resolved_address', 'address', 'ens_name', 'to'],
+    },
+    {
+      action: 'resolve_batch',
+      label: 'Resolve ENS Names (batch)',
+      description: 'Convert a list of ENS names to wallet addresses',
+      params: [
+        { key: 'names', label: 'ENS Names (JSON array)', placeholder: '["vitalik.eth","nick.eth"]', inputType: 'text', required: true },
+      ],
+      outputs: ['addresses', 'mapping', 'count'],
     },
     {
       action: 'lookup_address',
@@ -47,6 +62,45 @@ export const ENSPlugin: Plugin = {
           status: 'done',
           outputs: { resolved_address: address, address, ens_name: name, to: address },
           display: `${name} → ${address.slice(0, 6)}…${address.slice(-4)}`,
+        }
+      }
+
+      case 'resolve_batch': {
+        // Accept names from params, or fall back to rows/wallets from upstream
+        const raw =
+          params.names ?? params.rows ?? params.wallets ??
+          ctx.inputs.names ?? ctx.resolved.rows ?? ctx.resolved.wallets
+
+        if (!raw) return { status: 'error', error: 'Names list required — connect a sheets:fetch_rows node upstream' }
+
+        let names: string[]
+        try {
+          names = JSON.parse(raw) as string[]
+          if (!Array.isArray(names)) throw new Error()
+        } catch {
+          return { status: 'error', error: 'Names must be a JSON array' }
+        }
+
+        const resolved: Array<{ name: string; address: string | null }> = []
+        for (const name of names) {
+          const address = await resolveENS(name.trim())
+          resolved.push({ name: name.trim(), address })
+        }
+
+        const succeeded = resolved.filter((r) => r.address !== null)
+        const failed = resolved.filter((r) => r.address === null)
+
+        const addresses = succeeded.map((r) => r.address as string)
+        const mapping = Object.fromEntries(succeeded.map((r) => [r.name, r.address as string]))
+
+        return {
+          status: 'done',
+          outputs: {
+            addresses: JSON.stringify(addresses),
+            mapping: JSON.stringify(mapping),
+            count: String(succeeded.length),
+          },
+          display: `Resolved ${succeeded.length}/${names.length} ENS names${failed.length ? ` (${failed.length} failed)` : ''}`,
         }
       }
 
