@@ -91,7 +91,7 @@ EDGE LABEL RULES:
 DATA FLOW RULES:
 1. Outputs from one node automatically become available as inputs to the next node via the edge.
 2. For ENS names as recipients: always add ens:resolve_name before any send step.
-3. For sending to a list of addresses: use sheets:fetch_rows → metamask:batch_send (the rows output maps to wallets input automatically).
+3. For sending to a list of addresses: use sheets:fetch_rows → metamask:batch_send (the rows output maps to wallets input automatically). Always set column_name in sheets:fetch_rows params — if the user doesn't specify a column name, ask them which column contains the addresses.
 4. Always add metamask:approve before any ETH transfer (send_eth, batch_send).
 5. Always end with system:output.
 6. Prefer status:send_gasless_tx for small/frequent transfers.
@@ -103,7 +103,7 @@ n1:ens:resolve_name(ens_name:"vitalik.eth") → n2:metamask:approve → n3:metam
 edges: n1→n2 label:"address", n2→n3 label:"address", n3→n4 label:"tx_hash"
 
 "fetch addresses from my Google Sheet and send them each 0.01 ETH":
-n1:sheets:fetch_rows(sheet_url:"...") → n2:metamask:approve → n3:metamask:batch_send(amount:"0.01") → n4:system:output
+n1:sheets:fetch_rows(sheet_url:"...",column_name:"receiver") → n2:metamask:approve → n3:metamask:batch_send(amount:"0.01") → n4:system:output
 edges: n1→n2 label:"wallets", n2→n3 label:"wallets", n3→n4 label:"sent_count"
 
 "fetch ENS names, resolve them, split 0.5 ETH equally":

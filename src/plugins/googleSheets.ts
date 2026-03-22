@@ -28,10 +28,10 @@ export const GoogleSheetsPlugin: Plugin = {
         },
         {
           key: 'column_name',
-          label: 'Column Name (optional)',
-          placeholder: 'e.g. wallet_address — defaults to first column',
+          label: 'Column Name',
+          placeholder: 'e.g. receiver — exact header of the column to extract',
           inputType: 'text',
-          required: false,
+          required: true,
         },
       ],
       outputs: ['rows', 'wallets', 'table', 'count'],
@@ -107,11 +107,10 @@ export const GoogleSheetsPlugin: Plugin = {
         }
         resolvedColIndex = colIndex
       } else {
-        // Auto-detect: find the first column whose values look like Ethereum addresses (0x...)
-        const addressColIndex = headers.findIndex((_, j) =>
-          bodyRows.some((row) => (row[j] ?? '').startsWith('0x') && (row[j] ?? '').length >= 40),
-        )
-        resolvedColIndex = addressColIndex !== -1 ? addressColIndex : 0
+        return {
+          status: 'error',
+          error: `column_name is required. Available columns: ${headers.join(', ')}`,
+        }
       }
 
       const firstColValues = bodyRows.map((row) => row[resolvedColIndex] ?? '').filter(Boolean)
