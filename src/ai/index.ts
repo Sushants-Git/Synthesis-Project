@@ -2,6 +2,7 @@
  * AI Abstraction Layer
  *
  * Supports OpenAI and Claude. Switch provider via VITE_AI_PROVIDER env var.
+ * API keys are injected server-side via Vite proxy — never exposed in the bundle.
  * Falls back to the other provider automatically on failure.
  */
 
@@ -24,42 +25,53 @@ async function callOpenAI(
   messages: AIMessage[],
   systemPrompt?: string,
 ): Promise<string> {
-  const { default: OpenAI } = await import('openai')
-  const client = new OpenAI({ apiKey: import.meta.env.VITE_OPENAI_API_KEY, dangerouslyAllowBrowser: true })
-
   const allMessages = systemPrompt
     ? [{ role: 'system' as const, content: systemPrompt }, ...messages]
     : messages
 
-  const res = await client.chat.completions.create({
-    model: import.meta.env.VITE_OPENAI_MODEL ?? 'gpt-4o',
-    messages: allMessages,
+  const res = await fetch('/api/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: import.meta.env.VITE_OPENAI_MODEL ?? 'gpt-4o',
+      messages: allMessages,
+    }),
   })
 
-  return res.choices[0]?.message?.content ?? ''
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new Error(`OpenAI ${res.status}: ${text.slice(0, 200)}`)
+  }
+
+  const data = await res.json() as { choices: Array<{ message: { content: string } }> }
+  return data.choices[0]?.message?.content ?? ''
 }
 
 async function callClaude(
   messages: AIMessage[],
   systemPrompt?: string,
 ): Promise<string> {
-  const Anthropic = await import('@anthropic-ai/sdk')
-  const client = new Anthropic.default({
-    apiKey: import.meta.env.VITE_ANTHROPIC_API_KEY,
-    dangerouslyAllowBrowser: true,
+  const res = await fetch('/api/claude/v1/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: import.meta.env.VITE_CLAUDE_MODEL ?? 'claude-sonnet-4-6',
+      max_tokens: 4096,
+      system: systemPrompt,
+      messages: messages
+        .filter((m) => m.role !== 'system')
+        .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content })),
+    }),
   })
 
-  const res = await client.messages.create({
-    model: import.meta.env.VITE_CLAUDE_MODEL ?? 'claude-sonnet-4-6',
-    max_tokens: 4096,
-    system: systemPrompt,
-    messages: messages
-      .filter((m) => m.role !== 'system')
-      .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content })),
-  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new Error(`Claude ${res.status}: ${text.slice(0, 200)}`)
+  }
 
-  const block = res.content[0]
-  return block.type === 'text' ? block.text : ''
+  const data = await res.json() as { content: Array<{ type: string; text: string }> }
+  const block = data.content[0]
+  return block?.type === 'text' ? block.text : ''
 }
 
 /**
