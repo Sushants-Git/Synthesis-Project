@@ -38,7 +38,7 @@ function MessageBubble({ m }: { m: ConversationMessage }) {
   }
 
   return (
-    <div className={`text-xs leading-relaxed rounded-xl px-3 py-2 animate-fade-up ${
+    <div className={`text-xs leading-relaxed rounded-xl px-3 py-2 animate-fade-up break-words overflow-hidden ${
       m.role === 'user'
         ? 'bg-blue-50 text-blue-900 ml-6 text-right'
         : 'bg-zinc-50 border border-zinc-200 text-zinc-700 mr-6'
