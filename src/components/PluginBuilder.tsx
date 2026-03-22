@@ -127,13 +127,17 @@ function StepEditor({
   const [testing, setTesting] = useState(false)
   const [response, setResponse] = useState<unknown | null>(null)
   const [testError, setTestError] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<'headers' | 'body'>('headers')
+  const [transformResult, setTransformResult] = useState<Record<string, unknown> | null>(null)
+  const [transformError, setTransformError] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<'headers' | 'body' | 'transform'>('headers')
   const [pendingMap, setPendingMap] = useState<{ path: string; key: string } | null>(null)
 
   const handleTest = async () => {
     setTesting(true)
     setResponse(null)
     setTestError(null)
+    setTransformResult(null)
+    setTransformError(null)
     try {
       const headers: Record<string, string> = {}
       for (const h of step.headers) {
@@ -145,16 +149,44 @@ function StepEditor({
         body: step.method !== 'GET' && step.body.trim() ? step.body : undefined,
       })
       const text = await resp.text()
+      let parsed: unknown
       try {
-        setResponse(JSON.parse(text))
+        parsed = JSON.parse(text)
       } catch {
-        setResponse(text)
+        parsed = text
       }
+      setResponse(parsed)
       if (!resp.ok) setTestError(`HTTP ${resp.status}`)
+
+      // Run transform preview if one is written
+      if (step.transform?.trim() && parsed !== null) {
+        try {
+          // eslint-disable-next-line no-new-func
+          const fn = new Function('response', 'vars', step.transform)
+          const result = (fn(parsed, {}) as Record<string, unknown>) ?? {}
+          setTransformResult(result)
+        } catch (e) {
+          setTransformError(e instanceof Error ? e.message : String(e))
+        }
+      }
     } catch (e) {
       setTestError(e instanceof Error ? e.message : String(e))
     } finally {
       setTesting(false)
+    }
+  }
+
+  const runTransformPreview = () => {
+    if (!response || !step.transform?.trim()) return
+    setTransformError(null)
+    setTransformResult(null)
+    try {
+      // eslint-disable-next-line no-new-func
+      const fn = new Function('response', 'vars', step.transform)
+      const result = (fn(response, {}) as Record<string, unknown>) ?? {}
+      setTransformResult(result)
+    } catch (e) {
+      setTransformError(e instanceof Error ? e.message : String(e))
     }
   }
 
@@ -277,9 +309,9 @@ function StepEditor({
         </div>
       )}
 
-      {/* Tabs: Headers / Body */}
+      {/* Tabs: Headers / Body / Transform */}
       <div className="px-4 flex gap-3 border-b border-zinc-100 shrink-0">
-        {(['headers', 'body'] as const).map((tab) => (
+        {(['headers', 'body', 'transform'] as const).map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -294,6 +326,9 @@ function StepEditor({
               <span className="ml-1 text-[8px] bg-zinc-200 text-zinc-500 rounded-full px-1">
                 {step.headers.filter((h) => h.key).length}
               </span>
+            )}
+            {tab === 'transform' && step.transform?.trim() && (
+              <span className="ml-1 text-[8px] bg-amber-100 text-amber-600 rounded-full px-1">JS</span>
             )}
           </button>
         ))}
@@ -346,6 +381,65 @@ function StepEditor({
         {activeTab === 'body' && step.method === 'GET' && (
           <p className="text-[10px] text-zinc-400">GET requests don't have a body.</p>
         )}
+
+        {activeTab === 'transform' && (
+          <div className="space-y-2">
+            <div className="text-[9px] text-zinc-400 leading-relaxed">
+              Write JS to extract outputs from the response. Use{' '}
+              <code className="font-mono bg-zinc-100 px-1 rounded">response</code> for the parsed JSON and{' '}
+              <code className="font-mono bg-zinc-100 px-1 rounded">vars</code> for plugin inputs + previous
+              step outputs. Must <code className="font-mono bg-zinc-100 px-1 rounded">return {'{ key: value }'}</code>.
+            </div>
+            <div className="relative">
+              <textarea
+                className="w-full text-[11px] font-mono bg-zinc-900 text-zinc-100 border border-zinc-700 rounded-lg px-3 py-3 outline-none focus:border-blue-500 placeholder-zinc-600 resize-none leading-relaxed"
+                rows={8}
+                spellCheck={false}
+                placeholder={`// Example: extract active wallets from a list\nconst users = response.data ?? []\nconst active = users.filter(u => u.active)\n\nreturn {\n  addresses: JSON.stringify(active.map(u => u.wallet)),\n  count: String(active.length),\n  names: JSON.stringify(active.map(u => u.name)),\n}`}
+                value={step.transform ?? ''}
+                onChange={(e) => onUpdate({ ...step, transform: e.target.value })}
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={runTransformPreview}
+                disabled={!response || !step.transform?.trim()}
+                className="px-3 py-1 bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-white text-[10px] font-medium rounded-lg transition-[background-color] duration-150 active:scale-[0.97]"
+              >
+                ▶ Run on last response
+              </button>
+              {!response && (
+                <span className="text-[9px] text-zinc-400">Hit ▶ Test first to load a response</span>
+              )}
+            </div>
+
+            {/* Transform result preview */}
+            {transformError && (
+              <div className="text-[10px] text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 font-mono">
+                {transformError}
+              </div>
+            )}
+            {transformResult && (
+              <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3">
+                <div className="text-[9px] text-emerald-600 uppercase tracking-widest font-medium mb-2">
+                  Output keys ({Object.keys(transformResult).length})
+                </div>
+                <div className="space-y-1">
+                  {Object.entries(transformResult).map(([k, v]) => (
+                    <div key={k} className="flex items-start gap-2">
+                      <code className="text-[10px] font-mono text-emerald-700 shrink-0">{k}:</code>
+                      <span className="text-[10px] font-mono text-zinc-600 break-all">
+                        {typeof v === 'string'
+                          ? `"${v.slice(0, 80)}${v.length > 80 ? '…' : ''}"`
+                          : JSON.stringify(v).slice(0, 80)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Response + Mappings */}
@@ -358,8 +452,15 @@ function StepEditor({
 
         {response !== null && (
           <div>
-            <div className="text-[9px] text-zinc-400 uppercase tracking-widest font-medium mb-1.5">
-              Response — click a value to map it as an output
+            <div className="text-[9px] text-zinc-400 uppercase tracking-widest font-medium mb-1.5 flex items-center gap-2">
+              <span>Response</span>
+              {step.transform?.trim() ? (
+                <span className="text-amber-500 normal-case tracking-normal font-normal text-[9px] bg-amber-50 border border-amber-200 rounded px-1.5">
+                  JS transform active — click-to-map ignored
+                </span>
+              ) : (
+                <span className="normal-case tracking-normal font-normal text-[9px]">— click a value to map it as output</span>
+              )}
             </div>
             <div className="bg-zinc-50 border border-zinc-200 rounded-lg p-3 overflow-x-auto max-h-56 overflow-y-auto">
               {typeof response === 'string' ? (

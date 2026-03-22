@@ -14,6 +14,12 @@ export interface ApiStepDef {
   headers: Array<{ key: string; value: string }>
   body: string   // JSON string, may contain {{varName}} placeholders
   outputMappings: OutputMapping[]
+  /**
+   * Optional JS transform. Receives (response, vars) and must return
+   * Record<string, unknown>. Runs after the fetch; returned keys become outputs.
+   * If both transform and outputMappings are set, transform results take precedence.
+   */
+  transform?: string
 }
 
 export interface SoftPluginInput {
@@ -124,12 +130,33 @@ export async function executeSoftPlugin(
       return { status: 'error', error: `Step "${step.name}": response is not JSON` }
     }
 
-    for (const mapping of step.outputMappings) {
-      const value = getValueAtPath(data, mapping.path)
-      if (value !== undefined) {
-        const str = typeof value === 'string' ? value : JSON.stringify(value)
-        vars[mapping.key] = str
-        allOutputs[mapping.key] = str
+    // Run JS transform (takes precedence over click-mapped paths)
+    if (step.transform?.trim()) {
+      let result: Record<string, unknown>
+      try {
+        // eslint-disable-next-line no-new-func
+        const fn = new Function('response', 'vars', step.transform)
+        result = (fn(data, { ...vars }) as Record<string, unknown>) ?? {}
+      } catch (e) {
+        return {
+          status: 'error',
+          error: `Step "${step.name}" transform: ${e instanceof Error ? e.message : String(e)}`,
+        }
+      }
+      for (const [k, v] of Object.entries(result)) {
+        const str = typeof v === 'string' ? v : JSON.stringify(v)
+        vars[k] = str
+        allOutputs[k] = str
+      }
+    } else {
+      // Fallback: click-mapped dot-paths
+      for (const mapping of step.outputMappings) {
+        const value = getValueAtPath(data, mapping.path)
+        if (value !== undefined) {
+          const str = typeof value === 'string' ? value : JSON.stringify(value)
+          vars[mapping.key] = str
+          allOutputs[mapping.key] = str
+        }
       }
     }
   }
@@ -149,7 +176,10 @@ export async function executeSoftPlugin(
 // ── Plugin factory ────────────────────────────────────────────────────────────
 
 export function buildSoftPlugin(def: SoftPluginDef): Plugin {
-  const outputKeys = def.steps.flatMap((s) => s.outputMappings.map((m) => m.key))
+  // Steps with a JS transform have dynamic outputs; steps without use click-mapped paths
+  const outputKeys = def.steps.flatMap((s) =>
+    s.transform?.trim() ? ['(dynamic — JS transform)'] : s.outputMappings.map((m) => m.key),
+  )
 
   return {
     id: def.id,
