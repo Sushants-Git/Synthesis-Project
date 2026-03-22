@@ -190,16 +190,11 @@ export default function PluginSidebar({ onPrompt, onAddBlock }: Props) {
       >
         {/* Header */}
         <div className="px-4 pt-5 pb-4 shrink-0">
-          <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-lg bg-zinc-900 flex items-center justify-center shrink-0">
-              <span className="text-white text-[11px] font-black leading-none tracking-tight">C</span>
+          <div>
+            <div className="text-[11px] font-bold text-zinc-900 tracking-widest uppercase leading-none">
+              canvii
             </div>
-            <div>
-              <div className="text-[11px] font-bold text-zinc-900 tracking-widest uppercase leading-none">
-                canvii
-              </div>
-              <div className="text-[9px] text-zinc-400 mt-0.5 leading-none">visual flow builder</div>
-            </div>
+            <div className="text-[9px] text-zinc-400 mt-0.5 leading-none">visual flow builder</div>
           </div>
         </div>
 
