@@ -49,3 +49,26 @@ body,
   overflow: hidden;
   font-family: 'Geist', ui-sans-serif, system-ui, sans-serif;
 }
+
+/* ─── tldraw frame overrides ───────────────────────────────────────────── */
+
+/* Frame background: pure white */
+.tl-frame__body {
+  background: transparent !important;
+}
+
+/* Frame heading bar */
+.tl-frame-heading {
+  background: transparent !important;
+}
+
+/* Frame label: Geist font, subdued */
+.tl-frame-heading__title,
+.tl-frame-label {
+  font-family: 'Geist', ui-sans-serif, sans-serif !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.04em !important;
+  color: #a1a1aa !important;
+  text-transform: uppercase !important;
+}

@@ -1,31 +1,25 @@
 import { HTMLContainer, Rectangle2d, ShapeUtil, type TLBaseShape } from '@tldraw/tldraw'
 import { getPlugin } from '../plugins/registry.ts'
 
-/** Map tldraw-style plugin color names → CSS hex accent colors */
 export const PLUGIN_CSS_COLORS: Record<string, string> = {
-  orange: '#f97316',
-  blue:   '#6366f1',
-  green:  '#22c55e',
-  red:    '#ef4444',
-  violet: '#a855f7',
-  grey:   '#94a3b8',
+  orange:       '#f97316',
+  blue:         '#6366f1',
+  green:        '#22c55e',
+  red:          '#ef4444',
+  violet:       '#a855f7',
+  grey:         '#94a3b8',
   'light-blue': '#38bdf8',
-  yellow: '#eab308',
-  black:  '#18181b',
-  white:  '#94a3b8',
+  yellow:       '#eab308',
+  black:        '#18181b',
+  white:        '#94a3b8',
 }
 
 export type FlowNodeShapeProps = {
-  w: number
-  h: number
-  plugin: string
-  pluginName: string
-  action: string
-  label: string
-  description: string
+  w: number; h: number
+  plugin: string; pluginName: string; action: string
+  label: string; description: string
   params: Record<string, string>
-  icon: string
-  accentColor: string
+  icon: string; accentColor: string
 }
 
 export type FlowNodeShape = TLBaseShape<'flow-node', FlowNodeShapeProps>
@@ -35,26 +29,23 @@ export function computeNodeHeight(pluginId: string, action: string): number {
   const inputCount = cap?.params?.length ?? 0
   const outputCount = cap?.outputs?.length ?? 0
 
-  let h = 36 // top meta row (icon + plugin + action badge)
-  h += 28    // label block
-  if (inputCount > 0) h += 14 + inputCount * 17
-  if (outputCount > 0) h += 14 + outputCount * 16
-  h += 10    // bottom padding
+  let h = 58  // header section (icon + name + label + desc)
+  if (inputCount > 0) h += 20 + inputCount * 20
+  if (outputCount > 0) h += 20 + outputCount * 18
+  h += 12     // bottom padding
 
-  return Math.max(h, 80)
+  return Math.max(h, 90)
 }
 
 export class FlowNodeShapeUtil extends ShapeUtil<FlowNodeShape> {
   static override type = 'flow-node' as const
-
   override isAspectRatioLocked(_shape: FlowNodeShape) { return false }
   override canResize(_shape: FlowNodeShape) { return true }
 
   getDefaultProps(): FlowNodeShapeProps {
     return {
-      w: 200, h: 88,
-      plugin: 'system', pluginName: 'System', action: 'output',
-      label: 'Output', description: 'Final result',
+      w: 210, h: 90, plugin: 'system', pluginName: 'System',
+      action: 'output', label: 'Output', description: 'Final result',
       params: {}, icon: '▸', accentColor: '#94a3b8',
     }
   }
@@ -73,126 +64,169 @@ export class FlowNodeShapeUtil extends ShapeUtil<FlowNodeShape> {
     const mono: React.CSSProperties = { fontFamily: 'Geist Mono, ui-monospace, monospace' }
     const sans: React.CSSProperties = { fontFamily: 'Geist, ui-sans-serif, sans-serif' }
 
-    // Lighten accent for backgrounds
-    const accentBg = accentColor + '12'
-    const accentBorder = accentColor + '30'
+    const HEADER_H = 58
+    const scrollH = h - HEADER_H - 12
+
+    const renderIcon = () => {
+      if (icon.trimStart().startsWith('<svg')) {
+        return <span style={{ width: 13, height: 13, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }} dangerouslySetInnerHTML={{ __html: icon }} />
+      }
+      if (icon.startsWith('http')) {
+        return <img src={icon} alt="" width={13} height={13} style={{ objectFit: 'contain' }} />
+      }
+      return <span style={{ fontSize: 11, lineHeight: 1 }}>{icon}</span>
+    }
 
     return (
       <HTMLContainer id={shape.id} style={{ width: w, height: h }}>
         <div style={{
           width: '100%', height: '100%',
-          background: '#ffffff',
-          border: '1px solid #e4e4e7',
-          borderRadius: 12,
-          borderLeft: `3px solid ${accentColor}`,
-          ...sans,
-          overflow: 'hidden',
-          display: 'flex',
-          flexDirection: 'column',
-          boxShadow: '0 1px 4px rgba(0,0,0,0.06), 0 0 0 0.5px rgba(0,0,0,0.04)',
-          userSelect: 'none',
-          pointerEvents: 'none',
+          background: '#fff',
+          borderRadius: 14,
+          border: '1px solid rgba(0,0,0,0.08)',
+          boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.06)',
+          ...sans, overflow: 'hidden', display: 'flex', flexDirection: 'column',
+          userSelect: 'none', pointerEvents: 'none',
         }}>
 
-          {/* ─ Top meta row: icon + plugin name + action pill ─ */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 10px 6px 10px', flexShrink: 0 }}>
-            {/* Icon in accent-tinted badge */}
-            <div style={{
-              width: 18, height: 18, borderRadius: 5,
-              background: accentBg, border: `1px solid ${accentBorder}`,
-              display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-            }}>
-              {icon.trimStart().startsWith('<svg')
-                ? <span style={{ width: 11, height: 11, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }} dangerouslySetInnerHTML={{ __html: icon }} />
-                : icon.startsWith('http')
-                  ? <img src={icon} alt="" width={11} height={11} style={{ objectFit: 'contain' }} />
-                  : <span style={{ fontSize: 10, lineHeight: 1 }}>{icon}</span>
-              }
+          {/* ── Header: accent tinted bg ── */}
+          <div style={{
+            background: `linear-gradient(135deg, ${accentColor}18 0%, ${accentColor}08 100%)`,
+            borderBottom: `1px solid ${accentColor}20`,
+            padding: '10px 12px 8px',
+            flexShrink: 0,
+          }}>
+            {/* Top row: icon + plugin name + action chip */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+              <div style={{
+                width: 20, height: 20, borderRadius: 6,
+                background: '#fff',
+                boxShadow: `0 1px 3px rgba(0,0,0,0.1), 0 0 0 1px ${accentColor}30`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+              }}>
+                {renderIcon()}
+              </div>
+              <span style={{
+                fontSize: 9, fontWeight: 600, color: accentColor,
+                flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                letterSpacing: '0.04em', textTransform: 'uppercase',
+              }}>
+                {pluginName}
+              </span>
+              <span style={{
+                fontSize: 7.5, color: '#71717a', background: 'rgba(255,255,255,0.8)',
+                border: '1px solid rgba(0,0,0,0.08)', borderRadius: 4,
+                padding: '1px 6px', ...mono, whiteSpace: 'nowrap', flexShrink: 0,
+              }}>
+                {action}
+              </span>
             </div>
-            {/* Plugin name */}
-            <span style={{ fontSize: 9, fontWeight: 600, color: '#71717a', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', letterSpacing: '0.02em' }}>
-              {pluginName}
-            </span>
-            {/* Action pill */}
-            <span style={{
-              background: '#f4f4f5', border: '1px solid #e4e4e7',
-              borderRadius: 4, padding: '1px 5px',
-              fontSize: 7.5, color: '#71717a', ...mono,
-              letterSpacing: '0.03em', whiteSpace: 'nowrap', flexShrink: 0,
-            }}>
-              {action}
-            </span>
-          </div>
 
-          {/* ─ Label ─ */}
-          <div style={{ padding: '0 10px 6px 10px', flexShrink: 0 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: '#18181b', lineHeight: 1.25, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {/* Label + description */}
+            <div style={{ fontSize: 12.5, fontWeight: 700, color: '#0f0f10', lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {label}
             </div>
             {description && (
-              <div style={{ fontSize: 9, color: '#a1a1aa', lineHeight: 1.3, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <div style={{ fontSize: 9, color: '#71717a', marginTop: 2, lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {description}
               </div>
             )}
           </div>
 
-          {/* ─ Inputs ─ */}
-          {inputDefs.length > 0 && (
-            <>
-              <div style={{ height: 1, background: '#f4f4f5', margin: '0 10px', flexShrink: 0 }} />
-              <div style={{ padding: '5px 10px 3px', flexShrink: 0 }}>
-                <div style={{ fontSize: 7.5, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.09em', marginBottom: 3 }}>
-                  Inputs
-                </div>
-                {inputDefs.map((inp) => {
-                  const filled = params[inp.key]
-                  return (
-                    <div key={inp.key} style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 2, minHeight: 15 }}>
-                      <span style={{ width: 5, height: 5, borderRadius: '50%', background: filled ? accentColor : '#e4e4e7', flexShrink: 0, border: filled ? 'none' : '1px solid #d4d4d8' }} />
-                      <span style={{ fontSize: 9, color: '#52525b', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {inp.label}
-                      </span>
-                      {filled ? (
-                        <span style={{ fontSize: 7.5, color: '#3f3f46', background: '#f4f4f5', border: '1px solid #e4e4e7', borderRadius: 3, padding: '0 4px', maxWidth: 60, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', ...mono }}>
-                          {String(filled).length > 10 ? String(filled).slice(0, 10) + '…' : String(filled)}
-                        </span>
-                      ) : (
-                        <span style={{ fontSize: 7.5, color: '#c4c4c8', fontStyle: 'italic' }}>
-                          {inp.required ? 'required' : 'optional'}
-                        </span>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-            </>
-          )}
-
-          {/* ─ Outputs ─ */}
-          {outputKeys.length > 0 && (
-            <>
-              <div style={{ height: 1, background: '#f4f4f5', margin: '0 10px', flexShrink: 0 }} />
-              <div style={{ padding: '5px 10px 4px', flexShrink: 0 }}>
-                <div style={{ fontSize: 7.5, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.09em', marginBottom: 3 }}>
-                  Outputs
-                </div>
-                {outputKeys.map((key) => (
-                  <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 2, minHeight: 14 }}>
-                    <span style={{ width: 5, height: 5, borderRadius: 1.5, background: '#22c55e', flexShrink: 0 }} />
-                    <span style={{ fontSize: 9, color: '#52525b', ...mono }}>{key}</span>
+          {/* ── Scrollable I/O body ── */}
+          {(inputDefs.length > 0 || outputKeys.length > 0) && (
+            <div
+              style={{
+                flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden',
+                maxHeight: scrollH > 0 ? scrollH : undefined,
+                pointerEvents: 'all',
+                // hide scrollbar but keep scrollable
+                scrollbarWidth: 'none',
+              }}
+              onPointerDown={(e) => e.stopPropagation()}
+              onPointerMove={(e) => e.stopPropagation()}
+              onWheel={(e) => e.stopPropagation()}
+            >
+              {/* Inputs */}
+              {inputDefs.length > 0 && (
+                <div style={{ padding: '8px 12px 6px' }}>
+                  <div style={{
+                    fontSize: 7.5, fontWeight: 700, color: '#94a3b8',
+                    textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 5,
+                  }}>
+                    Inputs
                   </div>
-                ))}
-              </div>
-            </>
+                  {inputDefs.map((inp) => {
+                    const filled = params[inp.key]
+                    const valStr = filled ? (typeof filled === 'string' ? filled : String(filled)) : null
+                    return (
+                      <div key={inp.key} style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 4, minHeight: 18 }}>
+                        {/* Port indicator */}
+                        <div style={{
+                          width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
+                          background: filled ? accentColor : 'transparent',
+                          border: `1.5px solid ${filled ? accentColor : '#d4d4d8'}`,
+                          boxShadow: filled ? `0 0 0 2px ${accentColor}20` : 'none',
+                        }} />
+                        <span style={{ fontSize: 9.5, color: '#3f3f46', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {inp.label}
+                        </span>
+                        {valStr ? (
+                          <span style={{
+                            fontSize: 8, ...mono, color: '#3f3f46',
+                            background: `${accentColor}12`, border: `1px solid ${accentColor}25`,
+                            borderRadius: 4, padding: '1px 5px',
+                            maxWidth: 68, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                          }}>
+                            {valStr.length > 12 ? valStr.slice(0, 12) + '…' : valStr}
+                          </span>
+                        ) : (
+                          <span style={{ fontSize: 8, color: '#c4c4c8', fontStyle: 'italic' }}>
+                            {inp.required ? 'req' : 'opt'}
+                          </span>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+
+              {/* Divider between IN and OUT */}
+              {inputDefs.length > 0 && outputKeys.length > 0 && (
+                <div style={{ height: 1, background: '#f4f4f5', margin: '0 12px' }} />
+              )}
+
+              {/* Outputs */}
+              {outputKeys.length > 0 && (
+                <div style={{ padding: '6px 12px 8px' }}>
+                  <div style={{
+                    fontSize: 7.5, fontWeight: 700, color: '#94a3b8',
+                    textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 5,
+                  }}>
+                    Outputs
+                  </div>
+                  {outputKeys.map((key) => (
+                    <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 3, minHeight: 16 }}>
+                      <div style={{
+                        width: 6, height: 6, borderRadius: 2, flexShrink: 0,
+                        background: '#22c55e',
+                      }} />
+                      <span style={{ fontSize: 9.5, color: '#3f3f46', ...mono, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {key}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
 
-          <div style={{ flex: 1, minHeight: 0 }} />
         </div>
       </HTMLContainer>
     )
   }
 
   indicator(shape: FlowNodeShape) {
-    return <rect width={shape.props.w} height={shape.props.h} rx={12} ry={12} />
+    return <rect width={shape.props.w} height={shape.props.h} rx={14} ry={14} />
   }
 }
