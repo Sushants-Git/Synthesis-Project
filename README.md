@@ -1,8 +1,14 @@
-# FlowTx
+<div align="center">
+  <img src="./public/banner.png" alt="CAN VVEE banner" width="100%" />
+  <br /><br />
+  <img src="./public/favicon.png" alt="CAN VVEE logo" width="64" />
+  <h1>CAN VVEE</h1>
+  <p><strong>Visual AI-powered flow builder for blockchain transactions.</strong></p>
+</div>
 
-**A visual, AI-powered blockchain transaction builder.**
+---
 
-Describe what you want to do in plain English. FlowTx generates a visual flow diagram of every step needed — wallet connection, identity verification, ENS resolution, approvals, on-chain execution — and runs it step by step. No static UI. No form filling. Just intent.
+Describe what you want in plain English. CAN VVEE generates a visual flow diagram of every step needed — wallet connection, identity verification, ENS resolution, approvals, on-chain execution — and runs it step by step. No static UI. No form filling. Just intent.
 
 ---
 
@@ -27,9 +33,10 @@ Describe what you want to do in plain English. FlowTx generates a visual flow di
 - **Prompt-driven flows** — double-click the canvas or draw a frame, type your intent, get a visual plan
 - **Step-by-step executor** — each node runs in sequence; fund movements require explicit approval
 - **ENS everywhere** — names like `vitalik.eth` are resolved automatically, never shown as raw hex
-- **Plugin system** — built-in integrations for MetaMask, ENS, Status Network, Self Protocol, and Twitter
-- **Custom plugins** — add your own tool via a JSON manifest; your server handles execution
-- **AI fallback** — OpenAI primary, Claude as automatic fallback (or swap via config)
+- **Plugin system** — built-in integrations for MetaMask, ENS, Status Network, Self Protocol, Twitter, GitHub, ChatGPT
+- **Build your own plugin** — define steps, write JS transforms, wire inputs/outputs — no backend required
+- **JSON editor** — click Modify → edit the raw flow spec → Regenerate Diagram without touching the AI
+- **Keys never exposed** — API keys are injected server-side via Vercel edge functions, never bundled
 
 ---
 
@@ -38,10 +45,13 @@ Describe what you want to do in plain English. FlowTx generates a visual flow di
 | Plugin | What it does | Prize Track |
 |--------|-------------|-------------|
 | 🦊 MetaMask | Connect wallet, send ETH, ERC-7715 delegations, batch send | MetaMask Best Use of Delegations |
-| 🔷 ENS | Resolve ENS names ↔ addresses, replace hex everywhere | ENS Identity + Communication |
-| 🟢 Status Network | Gasless transactions and contract deployment on Status Network Sepolia | Status Network Go Gasless |
+| 🔷 ENS | Resolve ENS names ↔ addresses, batch resolve | ENS Identity + Communication |
+| 🟢 Status Network | Gasless transactions on Status Network Sepolia | Status Network Go Gasless |
 | 🪪 Self Protocol | Identity verification via Self Agent ID / Self Pass | Self Protocol Integration |
-| 🐦 Twitter | Search users by criteria for conditional flows | — |
+| 🐦 Twitter | Search users, fetch profiles, fetch tweets for AI scoring | — |
+| 🤖 ChatGPT | Score, filter, or summarise any list with a custom prompt | — |
+| 🐙 GitHub | Fetch repos and contributors for analysis | — |
+| 🔧 Util | filter, merge, join, first — array manipulation primitives | — |
 
 ---
 
@@ -53,10 +63,16 @@ Describe what you want to do in plain English. FlowTx generates a visual flow di
 Wallet → ENS Resolve → Approve → Send ETH
 ```
 
+**Sheet airdrop**
+```
+"Fetch addresses from this Google Sheet and send them each 0.01 ETH"
+Google Sheets → ENS Resolve Batch → Approve → Batch Send ETH
+```
+
 **Conditional transfer**
 ```
 "Send 0.5 ETH to the best ZK builder on Twitter"
-Wallet → Twitter Search → AI Filter → Verify Identity → ENS Resolve → Approve → Send ETH
+Twitter Search → Get Profiles → ChatGPT Score → Filter → Approve → Send ETH
 ```
 
 **Delegated agent action**
@@ -71,13 +87,14 @@ Wallet → Create Delegation (ERC-7715, max 0.01 ETH caveat) → Agent executes 
 
 | Layer | Tech |
 |-------|------|
-| Frontend | Vite + React + Tailwind CSS |
-| Canvas | tldraw |
+| Frontend | Vite + React 19 + TypeScript + Tailwind CSS |
+| Canvas | tldraw 3.9 — custom flow-node shape |
 | AI | OpenAI (gpt-4o) + Claude (claude-sonnet-4-6), switchable |
 | Blockchain | viem + wagmi |
 | Identity | ENS, Self Protocol |
 | Delegation | MetaMask Delegation Framework (ERC-7715) |
 | Gasless | Status Network Sepolia |
+| Deploy | Vercel (edge functions for API proxying) |
 
 ---
 
@@ -104,6 +121,9 @@ VITE_OPENAI_MODEL=gpt-4o
 
 VITE_ANTHROPIC_API_KEY=sk-ant-...
 VITE_CLAUDE_MODEL=claude-sonnet-4-6
+
+VITE_TWITTER_BEARER_TOKEN=...
+VITE_GITHUB_TOKEN=...         # optional, increases rate limit
 ```
 
 ### 3. Run
@@ -123,46 +143,30 @@ Open [http://localhost:5173](http://localhost:5173)
 | Create a flow | Double-click anywhere on the canvas and type your intent |
 | Draw a frame first | Press `F`, draw a frame, then type inside it |
 | Execute a flow | Click the flow → hit **⚡ Execute** |
-| Modify a flow | Click the flow → hit **Modify** |
-| Add a custom plugin | Click **+ Plugin** in the sidebar |
+| Modify a flow | Click the flow → hit **Modify** → edit JSON or chat |
+| Add a block directly | Click any action in the sidebar → **+ add** |
+| Build a plugin | Click **🧩 Build Plugin** in the sidebar |
 
 ---
 
-## Custom Plugins
+## Build Your Own Plugin
 
-You can extend FlowTx with any external service — no code required in the app. Define a plugin via JSON manifest and point it to your server:
+Add any external API as a plugin — no changes to the app required. In the Plugin Builder:
 
-```json
-{
-  "id": "my-plugin",
-  "name": "My Plugin",
-  "icon": "⚡",
-  "color": "violet",
-  "executeUrl": "https://your-server.com/execute",
-  "aiDescription": "Describe what this plugin does so the AI knows when to use it",
-  "capabilities": [
-    {
-      "action": "my_action",
-      "label": "My Action",
-      "description": "What this action does",
-      "params": [{ "key": "input", "label": "Input", "placeholder": "value", "inputType": "text", "required": true }],
-      "outputs": ["result"]
-    }
-  ]
-}
-```
+1. Add API steps (GET/POST, with URL and body)
+2. Write a JS transform to extract outputs from the response
+3. Define input/output field names
+4. Save — your plugin appears in the sidebar and the AI knows about it
 
-FlowTx will POST `{ action, params, context }` to your `executeUrl`. Return `{ status: "done", outputs: { result: "..." }, display: "Done" }`.
-
-Your server must include `Access-Control-Allow-Origin: *` in every response.
+The AI will automatically suggest your plugin when it fits the user's intent.
 
 ---
 
 ## Contributing
 
-This project is built during **The Synthesis** hackathon — a 14-day online hackathon where AI agents and humans build together.
+Built during **The Synthesis** hackathon — a 14-day online hackathon where AI agents and humans build together.
 
-Human lead: Vee ([@vee19twt](https://twitter.com/vee19twt))
+Human lead: Sushant ([@sushantstwt](https://twitter.com/sushantstwt))
 Agent: Claude (claude-sonnet-4-6, claude-code harness)
 
 ---
