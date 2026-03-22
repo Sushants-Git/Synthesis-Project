@@ -212,7 +212,14 @@ export default function PluginSidebar({ onPrompt, onAddBlock }: Props) {
 
   return (
     <>
-      <div className="fixed left-0 top-0 h-full w-56 z-30 flex flex-col bg-white border-r border-zinc-200 overflow-y-auto">
+      <div
+        className="fixed left-0 top-0 h-full w-56 z-30 flex flex-col bg-white border-r border-zinc-200 overflow-y-auto"
+        onKeyDown={(e) => e.stopPropagation()}
+        onKeyUp={(e) => e.stopPropagation()}
+        onCopy={(e) => e.stopPropagation()}
+        onCut={(e) => e.stopPropagation()}
+        onPaste={(e) => e.stopPropagation()}
+      >
         {/* Header */}
         <div className="px-4 py-4 border-b border-zinc-200 shrink-0">
           <div className="flex items-center gap-2">

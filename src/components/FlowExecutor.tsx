@@ -345,7 +345,14 @@ export default function FlowExecutor({ flow, onClose, onModify }: Props) {
   const totalOutputCount = Object.values(nodeOutputs).reduce((n, o) => n + Object.keys(o).length, 0)
 
   return (
-    <div className="fixed right-0 top-0 h-full w-[420px] z-50 flex flex-col bg-white border-l border-zinc-200 shadow-2xl shadow-zinc-200/40 overflow-hidden animate-slide-right">
+    <div
+      className="fixed right-0 top-0 h-full w-[420px] z-50 flex flex-col bg-white border-l border-zinc-200 shadow-2xl shadow-zinc-200/40 overflow-hidden animate-slide-right"
+      onKeyDown={(e) => e.stopPropagation()}
+      onKeyUp={(e) => e.stopPropagation()}
+      onCopy={(e) => e.stopPropagation()}
+      onCut={(e) => e.stopPropagation()}
+      onPaste={(e) => e.stopPropagation()}
+    >
 
       {/* ─ Header ─ */}
       <div className="px-5 py-4 border-b border-zinc-100 shrink-0">
