@@ -18,35 +18,48 @@ interface PromptState {
   pageY?: number
 }
 
+/** Position (screen coords) of action buttons for a flow frame */
+interface FrameButtonPos {
+  frameId: TLShapeId
+  screenX: number
+  screenY: number
+}
+
 const flowSpecMap = new Map<string, FlowSpec>()
 const flowFrameIds = new Set<string>()
 
-// Sidebar is 224px wide — offset tldraw canvas to avoid overlap
 const SIDEBAR_W = 224
-
-// Register custom shape utils once (stable reference — must not be re-created on render)
 const SHAPE_UTILS = [FlowNodeShapeUtil]
+
+/** Re-compute screen positions of all tracked flow frames */
+function recomputeFramePositions(editor: Editor): FrameButtonPos[] {
+  const out: FrameButtonPos[] = []
+  for (const id of flowFrameIds) {
+    const bounds = editor.getShapePageBounds(id as TLShapeId)
+    if (!bounds) continue
+    const topLeft = editor.pageToScreen({ x: bounds.x, y: bounds.y })
+    out.push({ frameId: id as TLShapeId, screenX: topLeft.x, screenY: topLeft.y - 44 })
+  }
+  return out
+}
 
 export default function FlowCanvas() {
   const editorRef = useRef<Editor | null>(null)
   const [promptState, setPromptState] = useState<PromptState | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [selectedFlowFrame, setSelectedFlowFrame] = useState<{
-    frameId: TLShapeId; screenX: number; screenY: number
-  } | null>(null)
+  /** Persistent button positions — one entry per flow frame, always visible */
+  const [frameButtons, setFrameButtons] = useState<FrameButtonPos[]>([])
   const [executingFlow, setExecutingFlow] = useState<FlowSpec | null>(null)
 
   const handleMount = useCallback((editor: Editor) => {
     editorRef.current = editor
 
-    // Render example flow at the center of the initial viewport
+    // Render example flow centred in the initial viewport
     const vp = editor.getViewportScreenBounds()
     const cx = SIDEBAR_W + (vp.w - SIDEBAR_W) / 2
     const cy = vp.h / 2
     const pagePos = editor.screenToPage({ x: cx, y: cy })
-
-    // Rough frame width so we can centre it
     const nodeCount = EXAMPLE_FLOW.nodes.length
     const approxFrameW = nodeCount * 200 + (nodeCount - 1) * 80 + 64
     const approxFrameH = 140
@@ -57,14 +70,21 @@ export default function FlowCanvas() {
       pagePos.x - approxFrameW / 2,
       pagePos.y - approxFrameH / 2,
     )
+    // Register before the listener is attached so it's never mistaken for a user frame
     flowFrameIds.add(exampleId)
     flowSpecMap.set(exampleId, EXAMPLE_FLOW)
 
+    // Initial button positions (after the example flow is on canvas)
+    setFrameButtons(recomputeFramePositions(editor))
+
     editor.store.listen((entry) => {
+      // Only open the prompt for frames the USER draws (not programmatic renders)
       if (entry.source === 'user') {
         for (const record of Object.values(entry.changes.added)) {
           if (record.typeName === 'shape' && (record as { type: string }).type === 'frame') {
             const id = (record as { id: TLShapeId }).id
+            // Skip frames we already know about (e.g. example flow)
+            if (flowFrameIds.has(id)) continue
             const bounds = editor.getShapePageBounds(id)
             if (!bounds) continue
             flowFrameIds.add(id)
@@ -74,17 +94,8 @@ export default function FlowCanvas() {
         }
       }
 
-      const selected = editor.getSelectedShapes()
-      const frame = selected.find((s) => s.type === 'frame' && flowFrameIds.has(s.id))
-      if (frame) {
-        const bounds = editor.getShapePageBounds(frame.id)
-        if (bounds) {
-          const topLeft = editor.pageToScreen({ x: bounds.x, y: bounds.y })
-          setSelectedFlowFrame({ frameId: frame.id, screenX: topLeft.x, screenY: topLeft.y - 44 })
-          return
-        }
-      }
-      setSelectedFlowFrame(null)
+      // Always recompute button positions (handles pan, zoom, shape moves)
+      setFrameButtons(recomputeFramePositions(editor))
     })
   }, [])
 
@@ -99,29 +110,24 @@ export default function FlowCanvas() {
       const editor = editorRef.current
       if (!editor || promptState) return
       if (e.clientX < SIDEBAR_W) return
-
       const pagePos = editor.screenToPage({ x: e.clientX, y: e.clientY })
       const shapesAtPoint = editor.getShapesAtPoint(pagePos)
       if (shapesAtPoint.length > 0) return
-
       openPromptAt(e.clientX, e.clientY, pagePos)
     },
     [promptState, openPromptAt],
   )
 
-  const handleSidebarPrompt = useCallback(
-    (prompt: string) => {
-      const editor = editorRef.current
-      if (!editor) return
-      const vp = editor.getViewportScreenBounds()
-      const cx = SIDEBAR_W + (vp.w - SIDEBAR_W) / 2
-      const cy = vp.h / 2
-      const pagePos = editor.screenToPage({ x: cx, y: cy })
-      setPromptState({ screenX: cx, screenY: cy, mode: 'create', pageX: pagePos.x, pageY: pagePos.y })
-      pendingAutoPromptRef.current = prompt
-    },
-    [],
-  )
+  const handleSidebarPrompt = useCallback((prompt: string) => {
+    const editor = editorRef.current
+    if (!editor) return
+    const vp = editor.getViewportScreenBounds()
+    const cx = SIDEBAR_W + (vp.w - SIDEBAR_W) / 2
+    const cy = vp.h / 2
+    const pagePos = editor.screenToPage({ x: cx, y: cy })
+    setPromptState({ screenX: cx, screenY: cy, mode: 'create', pageX: pagePos.x, pageY: pagePos.y })
+    pendingAutoPromptRef.current = prompt
+  }, [])
   const pendingAutoPromptRef = useRef<string | null>(null)
 
   const handleSubmit = useCallback(
@@ -142,6 +148,7 @@ export default function FlowCanvas() {
           flowSpecMap.set(id, flow)
         }
         setPromptState(null)
+        setFrameButtons(recomputeFramePositions(editor))
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Something went wrong')
       } finally {
@@ -151,27 +158,24 @@ export default function FlowCanvas() {
     [promptState],
   )
 
-  const openModify = useCallback(() => {
-    if (!selectedFlowFrame || !editorRef.current) return
-    const bounds = editorRef.current.getShapePageBounds(selectedFlowFrame.frameId)
+  const openModify = useCallback((btn: FrameButtonPos) => {
+    const editor = editorRef.current
+    if (!editor) return
+    const bounds = editor.getShapePageBounds(btn.frameId)
     if (!bounds) return
-    const center = editorRef.current.pageToScreen({ x: bounds.x + bounds.w / 2, y: bounds.y + bounds.h / 2 })
-    setSelectedFlowFrame(null)
-    setPromptState({ screenX: center.x, screenY: center.y, mode: 'modify', frameId: selectedFlowFrame.frameId })
-  }, [selectedFlowFrame])
+    const center = editor.pageToScreen({ x: bounds.x + bounds.w / 2, y: bounds.y + bounds.h / 2 })
+    setPromptState({ screenX: center.x, screenY: center.y, mode: 'modify', frameId: btn.frameId })
+  }, [])
 
-  const openExecute = useCallback(() => {
-    if (!selectedFlowFrame) return
-    const flow = flowSpecMap.get(selectedFlowFrame.frameId)
+  const openExecute = useCallback((btn: FrameButtonPos) => {
+    const flow = flowSpecMap.get(btn.frameId)
     if (flow) setExecutingFlow(flow)
-  }, [selectedFlowFrame])
+  }, [])
 
   return (
     <div className="flex w-full h-full">
-      {/* Plugin sidebar */}
       <PluginSidebar onPrompt={handleSidebarPrompt} />
 
-      {/* Canvas area — offset by sidebar width */}
       <div
         className="relative flex-1 h-full"
         style={{ marginLeft: SIDEBAR_W }}
@@ -187,26 +191,30 @@ export default function FlowCanvas() {
           </div>
         )}
 
-        {/* Flow frame action buttons */}
-        {selectedFlowFrame && !promptState && !executingFlow && (
+        {/* Persistent Execute / Modify buttons — one set per flow frame */}
+        {!promptState && !executingFlow && frameButtons.map((btn) => (
           <div
+            key={btn.frameId}
             className="fixed z-40 flex gap-1.5"
-            style={{ left: Math.max(selectedFlowFrame.screenX, SIDEBAR_W + 8), top: Math.max(selectedFlowFrame.screenY, 8) }}
+            style={{
+              left: Math.max(btn.screenX, SIDEBAR_W + 8),
+              top: Math.max(btn.screenY, 8),
+            }}
           >
             <button
-              onClick={openExecute}
+              onClick={() => openExecute(btn)}
               className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-lg shadow-lg transition-colors"
             >
               ⚡ Execute
             </button>
             <button
-              onClick={openModify}
+              onClick={() => openModify(btn)}
               className="px-3 py-1.5 bg-white hover:bg-zinc-50 border border-zinc-300 text-zinc-700 text-xs font-medium rounded-lg shadow-lg transition-colors"
             >
               Modify
             </button>
           </div>
-        )}
+        ))}
 
         {/* Floating prompt */}
         {promptState && (
@@ -247,7 +255,6 @@ export default function FlowCanvas() {
           <div className="fixed bottom-4 right-4 z-30 text-xs text-zinc-400 text-right space-y-0.5 pointer-events-none select-none">
             <div>F → draw frame → describe flow</div>
             <div>double-click canvas → quick prompt</div>
-            <div>select flow → ⚡ Execute</div>
           </div>
         )}
       </div>
