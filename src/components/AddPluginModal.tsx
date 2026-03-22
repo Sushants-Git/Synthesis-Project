@@ -46,7 +46,7 @@ const TEMPLATE_HTTP_WEBHOOK: PluginManifest = {
     'Call a custom REST API endpoint. The server receives {action, params, context} and returns a PluginResult. Use this as a generic data source or computation node.',
   icon: '🔌',
   color: 'blue',
-  executeUrl: 'https://your-api.com/can-wee-execute',
+  executeUrl: 'https://your-api.com/can-vvee-execute',
   capabilities: [
     {
       action: 'call',
@@ -87,7 +87,7 @@ const TEMPLATE_BLANK: PluginManifest = {
 
 const SERVER_CODE: Record<string, string> = {
   'google-sheets': `// Cloudflare Worker  ·  deploy with \`wrangler deploy\`
-// This handles the POST from CAN WEE and calls the Google Sheets API.
+// This handles the POST from CAN VVEE and calls the Google Sheets API.
 
 export default {
   async fetch(req: Request): Promise<Response> {
@@ -162,7 +162,7 @@ createServer(async (req, res) => {
   })
 }).listen(3000)`,
 
-  'my-plugin': `// CAN WEE plugin server — receive POST { action, params, context }
+  'my-plugin': `// CAN VVEE plugin server — receive POST { action, params, context }
 // Return a PluginResult: { status, outputs?, display?, error?, txHash?, link? }
 //
 // REQUIRED: your server must send CORS headers:
@@ -460,7 +460,7 @@ export default function AddPluginModal({ onAdd, onClose, initialManifest }: Prop
               <div className="space-y-1 text-[11px] text-zinc-500 leading-snug">
                 <div className="flex items-start gap-2">
                   <span className="text-blue-400 shrink-0 mt-[1px]">1</span>
-                  <span>CAN WEE POSTs <code className="bg-white border border-zinc-200 rounded px-1 text-[10px] font-mono text-zinc-700">{'{ action, params, context }'}</code> to your <code className="bg-white border border-zinc-200 rounded px-1 text-[10px] font-mono text-zinc-700">executeUrl</code></span>
+                  <span>CAN VVEE POSTs <code className="bg-white border border-zinc-200 rounded px-1 text-[10px] font-mono text-zinc-700">{'{ action, params, context }'}</code> to your <code className="bg-white border border-zinc-200 rounded px-1 text-[10px] font-mono text-zinc-700">executeUrl</code></span>
                 </div>
                 <div className="flex items-start gap-2">
                   <span className="text-blue-400 shrink-0 mt-[1px]">2</span>

@@ -41,7 +41,7 @@ export type ParseResult =
   | { type: 'message'; content: string }
 
 function buildSystemPrompt(): string {
-  return `You are CAN WEE — a visual blockchain flow builder. Convert natural language into a JSON flow spec.
+  return `You are CAN VVEE — a visual blockchain flow builder. Convert natural language into a JSON flow spec.
 
 RESPONSE FORMAT:
 - Clear intent → respond ONLY with valid JSON (no markdown fences, no explanation).

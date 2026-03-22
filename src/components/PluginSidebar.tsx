@@ -196,7 +196,7 @@ export default function PluginSidebar({ onPrompt, onAddBlock }: Props) {
         <div className="px-4 pt-5 pb-4 shrink-0">
           <div>
             <div className="text-[11px] font-bold text-zinc-900 tracking-widest uppercase leading-none">
-              CAN WEE
+              CAN VVEE
             </div>
             <div className="text-[9px] text-zinc-400 mt-0.5 leading-none">visual flow builder</div>
           </div>
