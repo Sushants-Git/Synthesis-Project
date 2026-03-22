@@ -839,8 +839,14 @@ export default function PluginBuilder({ initial, onSave, onClose }: Props) {
           {/* Footer */}
           <div className="flex items-center justify-between px-5 py-3 border-t border-zinc-100 shrink-0">
             <div className="text-[10px] text-zinc-400">
-              {steps.length} step{steps.length !== 1 ? 's' : ''} ·{' '}
-              {steps.flatMap((s) => s.outputMappings).length} outputs mapped
+              {!name.trim() ? (
+                <span className="text-amber-500">← Enter a plugin name to save</span>
+              ) : (
+                <>
+                  {steps.length} step{steps.length !== 1 ? 's' : ''} ·{' '}
+                  {steps.flatMap((s) => s.outputMappings).length} outputs mapped
+                </>
+              )}
             </div>
             <div className="flex gap-2">
               <button
