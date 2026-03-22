@@ -10,6 +10,37 @@ import { FlowNodeShapeUtil } from './FlowNodeShape.tsx'
 import { EXAMPLE_FLOW } from './exampleFlow.ts'
 import { getPlugin, loadPersistedPlugins } from '../plugins/registry.ts'
 
+// ── Canvas persistence ────────────────────────────────────────────────────────
+
+const CANVAS_KEY = 'canvii_canvas'
+
+interface SavedFlow {
+  flow: FlowSpec
+  x: number
+  y: number
+}
+
+function saveCanvas(editor: Editor): void {
+  const entries: SavedFlow[] = []
+  for (const [id, flow] of flowSpecMap.entries()) {
+    const bounds = editor.getShapePageBounds(id as TLShapeId)
+    if (bounds) entries.push({ flow, x: bounds.x, y: bounds.y })
+  }
+  localStorage.setItem(CANVAS_KEY, JSON.stringify(entries))
+}
+
+function loadCanvas(): SavedFlow[] {
+  try {
+    return JSON.parse(localStorage.getItem(CANVAS_KEY) ?? '[]') as SavedFlow[]
+  } catch {
+    return []
+  }
+}
+
+function clearCanvas(): void {
+  localStorage.removeItem(CANVAS_KEY)
+}
+
 interface PromptState {
   screenX: number
   screenY: number
@@ -85,6 +116,13 @@ export default function FlowCanvas() {
   /** Whether tldraw's StylePanel (colors/styles toolbar) is visible */
   const [showStylePanel, setShowStylePanel] = useState(true)
 
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const scheduleSave = useCallback((editor: Editor) => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = setTimeout(() => saveCanvas(editor), 500)
+  }, [])
+
   const closePrompt = useCallback(() => {
     setPromptState(null)
     setConversation([])
@@ -100,22 +138,32 @@ export default function FlowCanvas() {
     flowFrameIds.clear()
     flowSpecMap.clear()
 
-    const vp = editor.getViewportScreenBounds()
-    const cx = SIDEBAR_W + (vp.w - SIDEBAR_W) / 2
-    const cy = vp.h / 2
-    const pagePos = editor.screenToPage({ x: cx, y: cy })
-    const nodeCount = EXAMPLE_FLOW.nodes.length
-    const approxFrameW = nodeCount * 220 + (nodeCount - 1) * 80 + 64
-    const approxFrameH = 200
+    // Restore saved flows, or show the example flow if nothing saved
+    const saved = loadCanvas()
+    if (saved.length > 0) {
+      for (const { flow, x, y } of saved) {
+        const id = renderFlowAtPoint(editor, flow, x, y)
+        flowFrameIds.add(id)
+        flowSpecMap.set(id, flow)
+      }
+    } else {
+      const vp = editor.getViewportScreenBounds()
+      const cx = SIDEBAR_W + (vp.w - SIDEBAR_W) / 2
+      const cy = vp.h / 2
+      const pagePos = editor.screenToPage({ x: cx, y: cy })
+      const nodeCount = EXAMPLE_FLOW.nodes.length
+      const approxFrameW = nodeCount * 220 + (nodeCount - 1) * 80 + 64
+      const approxFrameH = 200
 
-    const exampleId = renderFlowAtPoint(
-      editor,
-      EXAMPLE_FLOW,
-      pagePos.x - approxFrameW / 2,
-      pagePos.y - approxFrameH / 2,
-    )
-    flowFrameIds.add(exampleId)
-    flowSpecMap.set(exampleId, EXAMPLE_FLOW)
+      const exampleId = renderFlowAtPoint(
+        editor,
+        EXAMPLE_FLOW,
+        pagePos.x - approxFrameW / 2,
+        pagePos.y - approxFrameH / 2,
+      )
+      flowFrameIds.add(exampleId)
+      flowSpecMap.set(exampleId, EXAMPLE_FLOW)
+    }
     setFrameButtons(recomputeFramePositions(editor))
 
     editor.store.listen((entry) => {
@@ -131,10 +179,12 @@ export default function FlowCanvas() {
             setPromptState({ screenX: center.x, screenY: center.y, mode: 'create', frameId: id })
           }
         }
+        // Debounced save whenever the user moves/resizes anything
+        scheduleSave(editor)
       }
       setFrameButtons(recomputeFramePositions(editor))
     })
-  }, [])
+  }, [scheduleSave])
 
   const openPromptAt = useCallback((screenX: number, screenY: number, pagePos?: { x: number; y: number }) => {
     const editor = editorRef.current
@@ -207,6 +257,7 @@ export default function FlowCanvas() {
             flowFrameIds.add(id)
             flowSpecMap.set(id, result.flow)
           }
+          saveCanvas(editor)
           setConversation([])
           setPromptState(null)
           setFrameButtons(recomputeFramePositions(editor))
@@ -261,6 +312,20 @@ export default function FlowCanvas() {
     if (frameId) openModify({ frameId, screenX: 0, screenY: 0 })
   }, [executingFrameId, openModify])
 
+  const handleClearAll = useCallback(() => {
+    const editor = editorRef.current
+    if (!editor) return
+    const all = editor.getCurrentPageShapeIds()
+    if (all.size > 0) editor.deleteShapes([...all])
+    flowFrameIds.clear()
+    flowSpecMap.clear()
+    clearCanvas()
+    setFrameButtons([])
+    setExecutingFlow(null)
+    setExecutingFrameId(null)
+    setShowStylePanel(true)
+  }, [])
+
   const handleAddBlock = useCallback((pluginId: string, action: string) => {
     const editor = editorRef.current
     if (!editor) return
@@ -298,6 +363,7 @@ export default function FlowCanvas() {
     const frameId = renderFlowAtPoint(editor, flow, x, y)
     flowFrameIds.add(frameId)
     flowSpecMap.set(frameId, flow)
+    saveCanvas(editor)
     setFrameButtons(recomputeFramePositions(editor))
   }, [])
 
@@ -316,15 +382,24 @@ export default function FlowCanvas() {
           components={showStylePanel ? TLDRAW_COMPONENTS_DEFAULT : TLDRAW_COMPONENTS_NO_STYLE}
         />
 
-        {/* Toggle tldraw style panel — only when executor is closed */}
+        {/* Top-right controls — only when executor is closed */}
         {!executingFlow && (
-          <button
-            onClick={() => setShowStylePanel((v) => !v)}
-            title={showStylePanel ? 'Hide tldraw panel' : 'Show tldraw panel'}
-            className="fixed top-3 right-3 z-40 px-2 py-1 bg-white border border-zinc-200 rounded-md shadow-sm text-[10px] text-zinc-400 hover:text-zinc-600 hover:border-zinc-300 transition-colors duration-150 select-none"
-          >
-            {showStylePanel ? 'Hide panel' : 'Show panel'}
-          </button>
+          <div className="fixed top-3 right-3 z-40 flex items-center gap-1.5">
+            <button
+              onClick={handleClearAll}
+              title="Clear all flows"
+              className="px-2 py-1 bg-white border border-zinc-200 rounded-md shadow-sm text-[10px] text-zinc-400 hover:text-red-500 hover:border-red-200 transition-colors duration-150 select-none"
+            >
+              Clear all
+            </button>
+            <button
+              onClick={() => setShowStylePanel((v) => !v)}
+              title={showStylePanel ? 'Hide tldraw panel' : 'Show tldraw panel'}
+              className="px-2 py-1 bg-white border border-zinc-200 rounded-md shadow-sm text-[10px] text-zinc-400 hover:text-zinc-600 hover:border-zinc-300 transition-colors duration-150 select-none"
+            >
+              {showStylePanel ? 'Hide panel' : 'Show panel'}
+            </button>
+          </div>
         )}
 
         {/* Persistent Execute / Modify buttons */}
