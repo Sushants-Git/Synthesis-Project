@@ -10,12 +10,12 @@ import {
   saveSoftPlugin,
   deleteSoftPlugin,
 } from './softPlugin.ts'
-import type { Plugin, PluginManifest, ExecutionContext, PluginCapability, PluginResult, ParamDef } from './types.ts'
+import type { Plugin, PluginManifest, ExecutionContext, PluginCapability, PluginResult, InputDef, OutputDef, IOType } from './types.ts'
 import type { SoftPluginDef } from './softPlugin.ts'
 export type { SoftPluginDef }
 
 // Re-export types so plugin authors only need to import from one place
-export type { Plugin, PluginManifest, ExecutionContext, PluginCapability, PluginResult, ParamDef }
+export type { Plugin, PluginManifest, ExecutionContext, PluginCapability, PluginResult, InputDef, OutputDef, IOType }
 
 const STORAGE_KEY = 'canvii_custom_plugins'
 
@@ -53,16 +53,18 @@ export function loadPluginManifest(manifest: PluginManifest): Plugin {
     executeUrl: manifest.executeUrl,
     capabilities: manifest.capabilities,
 
-    async execute(action: string, params: Record<string, string>, ctx: ExecutionContext): Promise<PluginResult> {
+    async execute(action: string, inputs: Record<string, string | string[]>, ctx: ExecutionContext): Promise<PluginResult> {
       if (!manifest.executeUrl) {
         return { status: 'done', display: `[${manifest.name}] visual-only — no executeUrl configured` }
       }
 
-      // Substitute {{variable}} placeholders in the URL and in every param value
       const vars = ctx.templateVars ?? {}
       const url = substituteVars(manifest.executeUrl, vars)
-      const resolvedParams = Object.fromEntries(
-        Object.entries(params).map(([k, v]) => [k, substituteVars(v, vars)]),
+      const resolvedInputs: Record<string, string | string[]> = Object.fromEntries(
+        Object.entries(inputs).map(([k, v]) => [
+          k,
+          Array.isArray(v) ? v.map((s) => substituteVars(s, vars)) : substituteVars(v, vars),
+        ]),
       )
 
       try {
@@ -72,7 +74,7 @@ export function loadPluginManifest(manifest: PluginManifest): Plugin {
         const resp = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action, params: resolvedParams, context: ctx }),
+          body: JSON.stringify({ action, inputs: resolvedInputs, context: ctx }),
           signal: controller.signal,
         })
         clearTimeout(timeout)
@@ -196,16 +198,15 @@ export function buildPluginContext(): string {
     const meta = p.prizeTrack ? ` | Prize: ${p.prizeTrack}` : ''
     const tag = p.category === 'soft' ? ' [user-built]' : ''
     lines.push(`- ${p.id} (${p.name}${meta}${tag}): ${p.aiDescription}`)
-    // Include per-action signature so the AI knows exact action IDs, required inputs, outputs
     for (const cap of p.capabilities) {
-      const required = cap.params.filter((x) => x.required).map((x) => x.key)
-      const optional = cap.params.filter((x) => !x.required).map((x) => x.key)
-      const paramStr = [
-        ...(required.map((k) => `${k}*`)),
-        ...(optional.map((k) => `${k}?`)),
-      ].join(', ')
-      const outStr = cap.outputs.length ? cap.outputs.join(', ') : 'none'
-      lines.push(`  · ${p.id}:${cap.action}(${paramStr}) → [${outStr}]`)
+      const inStr = cap.inputs.map((i) => {
+        const t = i.type === 'string[]' ? '[]' : ''
+        return `${i.key}${t}${i.required ? '*' : '?'}`
+      }).join(', ')
+      const outStr = cap.outputs.length
+        ? cap.outputs.map((o) => `${o.key}${o.type === 'string[]' ? '[]' : ''}`).join(', ')
+        : 'none'
+      lines.push(`  · ${p.id}:${cap.action}(${inStr}) → [${outStr}]`)
     }
   }
   return lines.join('\n')

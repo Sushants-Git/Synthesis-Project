@@ -1,27 +1,27 @@
 import { chat } from './index.ts'
 import { buildPluginContext } from '../plugins/registry.ts'
 
-export interface InputField {
-  key: string
-  label: string
-  placeholder: string
-  inputType: 'address' | 'eth_amount' | 'text' | 'ens_name' | 'select'
-}
-
 export interface FlowNode {
   id: string
   plugin: string
   action: string
   label: string
   description: string
+  /** Static values pre-filled by the AI. String values only; executor handles type coercion. */
   params?: Record<string, string>
-  requiredInputs?: InputField[]
 }
 
 export interface FlowEdge {
   from: string
   to: string
   label?: string
+  /**
+   * Explicit output→input key remapping.
+   * e.g. { "address": "to" } means: take `address` from the source node's outputs
+   * and pass it as `to` to the target node's inputs.
+   * Omit when output key and input key are identical (auto-matched by name).
+   */
+  wire?: Record<string, string>
 }
 
 export interface FlowSpec {
@@ -41,19 +41,19 @@ export type ParseResult =
   | { type: 'message'; content: string }
 
 function buildSystemPrompt(): string {
-  return `You are canvii — a visual blockchain transaction flow builder. Convert a natural language intent into a JSON flow spec using the available plugins.
+  return `You are canvii — a visual blockchain flow builder. Convert natural language into a JSON flow spec.
 
 RESPONSE RULES:
-- If intent is clear → respond ONLY with valid JSON (no markdown fences, no explanation text whatsoever).
-- If intent is ambiguous → ask ONE short clarifying question as plain text (no JSON).
-- Never mix JSON and explanation in the same response.
+- Clear intent → respond ONLY with valid JSON (no markdown fences, no explanation).
+- Ambiguous → ask ONE short clarifying question as plain text.
+- Never mix JSON and explanation.
 
-AVAILABLE PLUGINS (format: pluginId:action(required*, optional?) → [outputs]):
+AVAILABLE PLUGINS (format: pluginId:action(input: type*, ...) → [output: type]):
 ${buildPluginContext()}
 
 SYSTEM NODES (plugin: "system"):
 - "output" — shows final result (always end every flow with this)
-- "note" — display a message to the user
+- "note" — display a message
 
 JSON OUTPUT FORMAT:
 {
@@ -66,59 +66,59 @@ JSON OUTPUT FORMAT:
       "action": "action_name",
       "label": "Human readable label",
       "description": "What this step does",
-      "params": {}
+      "params": { "key": "value" }
     }
   ],
-  "edges": [{ "from": "n1", "to": "n2", "label": "output_key_name" }]
+  "edges": [
+    { "from": "n1", "to": "n2" },
+    { "from": "n2", "to": "n3", "wire": { "fromOutputKey": "toInputKey" } }
+  ]
 }
 
-@MENTION RULES:
-- If the user writes @pluginId (e.g. @coingecko, @my_api), they are explicitly requesting that plugin.
-- Always use the mentioned plugin in the flow, matched by exact pluginId.
-- @pluginId:action is also valid and pins both plugin and action.
+DATA FLOW MODEL:
+- Each node has typed inputs and outputs (string or string[]).
+- Edges connect outputs of one node to inputs of the next.
+- When output key == input key: no wire needed (auto-matched by name).
+- When keys differ: add wire: { "outputKey": "inputKey" }.
 
-PARAM RULES:
-- Put every value mentioned in the user's prompt into "params" (amounts, addresses, names, URLs, etc.)
-- Leave "params" empty {} only when there's truly nothing to pre-fill
-- Do NOT use "requiredInputs" — the executor handles missing fields automatically
+WIRE REFERENCE (required when keys differ):
+- ens:resolve_name → metamask:send_eth: wire {"address":"to"}
+- ens:resolve_name → status:send_gasless_tx: wire {"address":"to"}
+- ens:resolve_name → self:verify_identity: auto-matched (both "address")
+- ens:resolve_batch → metamask:batch_send: wire {"addresses":"recipients"}
+- sheets:fetch_rows → ens:resolve_batch: wire {"rows":"names"}
+- sheets:fetch_rows → metamask:batch_send: wire {"rows":"recipients"}
+- twitter:search_users → twitter:verify_handle: wire {"top_handle":"handle"}
 
-EDGE LABEL RULES:
-- Always set the edge label to the exact output key being passed between nodes
-- ens:resolve_name → next node: label = "address"
-- sheets:fetch_rows → metamask:batch_send: label = "wallets"
-- metamask:connect_wallet → next node: label = "wallet_address"
-
-DATA FLOW RULES:
-1. Outputs from one node automatically become available as inputs to the next node via the edge.
-2. For ENS names as recipients: always add ens:resolve_name before any send step.
-3. For sending to a list of addresses: use sheets:fetch_rows → metamask:batch_send (the rows output maps to wallets input automatically). Always set column_name in sheets:fetch_rows params — if the user doesn't specify a column name, ask them which column contains the addresses.
-4. Always add metamask:approve before any ETH transfer (send_eth, batch_send).
-5. Always end with system:output.
+RULES:
+1. Put all user-specified values (amounts, addresses, names, URLs) in params.
+2. Always end with system:output.
+3. Always add metamask:approve before any ETH transfer.
+4. For ENS name recipients: add ens:resolve_name before send step, wire {"address":"to"}.
+5. For lists: use resolve_batch for ENS, batch_send for sending to multiple.
 6. Prefer status:send_gasless_tx for small/frequent transfers.
+7. Use wire only when the output key and input key are different names.
+
+@MENTION RULES:
+- @pluginId pins that plugin. @pluginId:action pins plugin + action.
 
 EXAMPLE FLOWS:
 
 "send 0.1 ETH to vitalik.eth":
-n1:ens:resolve_name(ens_name:"vitalik.eth") → n2:metamask:approve → n3:metamask:send_eth(amount:"0.1") → n4:system:output
-edges: n1→n2 label:"address", n2→n3 label:"address", n3→n4 label:"tx_hash"
+nodes: n1:ens:resolve_name(name:"vitalik.eth"), n2:metamask:approve, n3:metamask:send_eth(amount:"0.1"), n4:system:output
+edges: n1→n2, n2→n3 wire{"address":"to"}, n3→n4
 
-"fetch addresses from my Google Sheet and send them each 0.01 ETH":
-n1:sheets:fetch_rows(sheet_url:"...",column_name:"receiver") → n2:metamask:approve → n3:metamask:batch_send(amount:"0.01") → n4:system:output
-edges: n1→n2 label:"wallets", n2→n3 label:"wallets", n3→n4 label:"sent_count"
+"fetch addresses from Google Sheet, send each 0.01 ETH":
+nodes: n1:sheets:fetch_rows(sheet_url:"...",column_name:"receiver"), n2:metamask:approve, n3:metamask:batch_send(amount:"0.01"), n4:system:output
+edges: n1→n2, n2→n3 wire{"rows":"recipients"}, n3→n4
 
-"fetch ENS names, resolve them, split 0.5 ETH equally":
-n1:sheets:fetch_rows(sheet_url:"...") → n2:ens:resolve_batch → n3:metamask:approve → n4:metamask:batch_send(total_amount:"0.5") → n5:system:output
-edges: n1→n2 label:"rows", n2→n3 label:"addresses", n3→n4 label:"addresses", n4→n5 label:"sent_count"
-NOTE: use total_amount when splitting a fixed total equally; use amount when each recipient gets the same fixed amount.
+"fetch ENS names from sheet, resolve, send 0.5 ETH split equally":
+nodes: n1:sheets:fetch_rows(sheet_url:"..."), n2:ens:resolve_batch, n3:metamask:approve, n4:metamask:batch_send(total_amount:"0.5"), n5:system:output
+edges: n1→n2 wire{"rows":"names"}, n2→n3, n3→n4 wire{"addresses":"recipients"}, n4→n5
 
-"fetch ENS names from Google Sheet and resolve them to addresses":
-n1:sheets:fetch_rows(sheet_url:"...") → n2:ens:resolve_batch → n3:system:output
-edges: n1→n2 label:"rows", n2→n3 label:"addresses"
-NOTE: use ens:resolve_batch (not resolve_name) whenever the input is a list of ENS names from sheets or any array source.
-
-"resolve vitalik.eth then look up the ENS name for that address":
-n1:ens:resolve_name(ens_name:"vitalik.eth") → n2:ens:lookup_address → n3:system:output
-edges: n1→n2 label:"address", n2→n3 label:"ens_name"`
+"resolve vitalik.eth then reverse-lookup that address":
+nodes: n1:ens:resolve_name(name:"vitalik.eth"), n2:ens:lookup_address, n3:system:output
+edges: n1→n2 (auto-matched: both use "address"), n2→n3`
 }
 
 function extractJSON(text: string): string {
@@ -127,10 +127,6 @@ function extractJSON(text: string): string {
   return text.trim()
 }
 
-/**
- * Parse a multi-turn conversation into either a FlowSpec or a clarifying message.
- * Pass the full conversation history so the AI has context for follow-ups.
- */
 export async function parseIntent(conversation: ConversationMessage[]): Promise<ParseResult> {
   const response = await chat(
     conversation.map((m) => ({ role: m.role, content: m.content })),
@@ -139,7 +135,6 @@ export async function parseIntent(conversation: ConversationMessage[]): Promise<
 
   try {
     const flow = JSON.parse(extractJSON(response.content)) as FlowSpec
-    // Sanity-check it looks like a FlowSpec before returning
     if (!flow.nodes || !Array.isArray(flow.nodes)) throw new Error('not a FlowSpec')
     return { type: 'flow', flow }
   } catch {

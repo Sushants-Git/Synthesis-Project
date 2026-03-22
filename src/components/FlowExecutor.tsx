@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import PluginIcon from './PluginIcon.tsx'
 import type { FlowSpec, FlowNode } from '../ai/flowParser.ts'
-import type { PluginResult, ExecutionContext } from '../plugins/types.ts'
+import type { PluginResult, ExecutionContext, IOType } from '../plugins/types.ts'
 import { getPlugin, substituteVars, loadVarDefaults } from '../plugins/registry.ts'
 import {
   connectWallet,
@@ -16,6 +16,7 @@ interface StepState {
   node: FlowNode
   status: StepStatus
   result?: PluginResult
+  /** User-entered overrides for this step's inputs */
   inputs: Record<string, string>
 }
 
@@ -33,27 +34,126 @@ const STATUS_COLOR: Record<StepStatus, string> = {
   done: 'text-emerald-500', error: 'text-red-500',
 }
 
-/** Plugins that require a wallet connection */
 const WALLET_PLUGINS = new Set(['metamask', 'ens', 'status', 'self'])
 
-// ─── Static analysis ─────────────────────────────────────────────────────────
+// ─── Type coercion ────────────────────────────────────────────────────────────
 
-function buildUpstreamOutputMap(flow: FlowSpec): Map<string, Set<string>> {
-  const nodeOutputKeys = new Map<string, string[]>()
-  for (const node of flow.nodes) {
-    const cap = getPlugin(node.plugin)?.capabilities.find((c) => c.action === node.action)
-    nodeOutputKeys.set(node.id, cap?.outputs ?? [])
+function coerce(val: string | string[], targetType: IOType): string | string[] {
+  if (targetType === 'string' && Array.isArray(val)) return val[0] ?? ''
+  if (targetType === 'string[]' && !Array.isArray(val)) return [val]
+  return val
+}
+
+// ─── Input resolution ─────────────────────────────────────────────────────────
+
+/**
+ * Resolve all inputs for a node:
+ * 1. Hardcoded params from flow spec (with template var substitution)
+ * 2. Upstream outputs matched via edge wires (explicit) or key-name (auto)
+ * 3. User-entered overrides (highest priority)
+ */
+function resolveInputs(
+  node: FlowNode,
+  flow: FlowSpec,
+  nodeOutputs: Record<string, Record<string, string | string[]>>,
+  templateVars: Record<string, string>,
+  userInputs: Record<string, string>,
+): Record<string, string | string[]> {
+  const cap = getPlugin(node.plugin)?.capabilities.find((c) => c.action === node.action)
+  const result: Record<string, string | string[]> = {}
+
+  // 1. Static params from flow spec
+  for (const [k, v] of Object.entries(node.params ?? {})) {
+    const substituted = substituteVars(v, templateVars)
+    const inputDef = cap?.inputs.find((i) => i.key === k)
+    if (inputDef?.type === 'string[]') {
+      try {
+        const parsed = JSON.parse(substituted)
+        result[k] = Array.isArray(parsed) ? parsed.map(String) : [substituted]
+      } catch {
+        result[k] = [substituted]
+      }
+    } else {
+      result[k] = substituted
+    }
   }
-  const result = new Map<string, Set<string>>()
-  for (const node of flow.nodes) {
-    const keys = new Set<string>()
-    for (const edge of flow.edges) {
-      if (edge.to === node.id) {
-        for (const k of (nodeOutputKeys.get(edge.from) ?? [])) keys.add(k)
+
+  // 2. Upstream wiring
+  for (const edge of flow.edges) {
+    if (edge.to !== node.id) continue
+    const upstreamOutputs = nodeOutputs[edge.from] ?? {}
+
+    if (edge.wire) {
+      // Explicit: { fromOutputKey: toInputKey }
+      for (const [fromKey, toKey] of Object.entries(edge.wire)) {
+        const val = upstreamOutputs[fromKey]
+        if (val !== undefined) {
+          const inputDef = cap?.inputs.find((i) => i.key === toKey)
+          result[toKey] = coerce(val, inputDef?.type ?? 'string')
+        }
+      }
+    } else if (cap) {
+      // Auto key-name match
+      for (const inputDef of cap.inputs) {
+        if (inputDef.key in upstreamOutputs) {
+          result[inputDef.key] = coerce(upstreamOutputs[inputDef.key], inputDef.type)
+        }
       }
     }
-    result.set(node.id, keys)
   }
+
+  // 3. User-entered inputs (highest priority)
+  for (const [k, v] of Object.entries(userInputs)) {
+    if (v.trim() !== '') {
+      const inputDef = cap?.inputs.find((i) => i.key === k)
+      if (inputDef?.type === 'string[]') {
+        try {
+          const parsed = JSON.parse(v)
+          result[k] = Array.isArray(parsed) ? parsed.map(String) : [v]
+        } catch {
+          result[k] = [v]
+        }
+      } else {
+        result[k] = v
+      }
+    }
+  }
+
+  return result
+}
+
+// ─── Static analysis ──────────────────────────────────────────────────────────
+
+/** Which input keys will be auto-filled from upstream (for UI hints) */
+function buildUpstreamInputMap(flow: FlowSpec): Map<string, Set<string>> {
+  const result = new Map<string, Set<string>>()
+
+  for (const node of flow.nodes) {
+    const cap = getPlugin(node.plugin)?.capabilities.find((c) => c.action === node.action)
+    const filledKeys = new Set<string>()
+
+    for (const edge of flow.edges) {
+      if (edge.to !== node.id) continue
+      const fromNode = flow.nodes.find((n) => n.id === edge.from)
+      const fromCap = fromNode
+        ? getPlugin(fromNode.plugin)?.capabilities.find((c) => c.action === fromNode.action)
+        : null
+      const fromOutputKeys = new Set((fromCap?.outputs ?? []).map((o) => o.key))
+
+      if (edge.wire) {
+        for (const [fromKey, toKey] of Object.entries(edge.wire)) {
+          if (fromOutputKeys.has(fromKey)) filledKeys.add(toKey)
+        }
+      } else if (cap) {
+        for (const inputDef of cap.inputs) {
+          if (fromOutputKeys.has(inputDef.key)) filledKeys.add(inputDef.key)
+        }
+      }
+    }
+
+    result.set(node.id, filledKeys)
+  }
+
   return result
 }
 
@@ -102,19 +202,24 @@ function DataTable({ rows }: { rows: string[][] }) {
   )
 }
 
-function DataValue({ value, inline = false }: { value: string; inline?: boolean }) {
+function DataValue({ value, inline = false }: { value: string | string[]; inline?: boolean }) {
   let flat: string[] | null = null
   let grid: string[][] | null = null
-  try {
-    const p = JSON.parse(value)
-    if (Array.isArray(p)) {
-      if (p.length > 0 && Array.isArray(p[0])) {
-        grid = (p as unknown[][]).map((row) => (row as unknown[]).map(String))
-      } else {
-        flat = p.map(String)
+
+  if (Array.isArray(value)) {
+    flat = value
+  } else {
+    try {
+      const p = JSON.parse(value)
+      if (Array.isArray(p)) {
+        if (p.length > 0 && Array.isArray(p[0])) {
+          grid = (p as unknown[][]).map((row) => (row as unknown[]).map(String))
+        } else {
+          flat = p.map(String)
+        }
       }
-    }
-  } catch { /* not JSON */ }
+    } catch { /* not JSON */ }
+  }
 
   const [expanded, setExpanded] = useState(
     (grid !== null && grid.length <= 20) || (flat !== null && flat.length <= 20)
@@ -144,7 +249,8 @@ function DataValue({ value, inline = false }: { value: string; inline?: boolean 
     )
   }
 
-  const short = value.length > 38 ? value.slice(0, 36) + '…' : value
+  const str = typeof value === 'string' ? value : JSON.stringify(value)
+  const short = str.length > 38 ? str.slice(0, 36) + '…' : str
   return (
     <span className="text-[10px] font-mono bg-zinc-100 border border-zinc-200 rounded px-2 py-0.5 text-zinc-600">
       {short}
@@ -152,10 +258,11 @@ function DataValue({ value, inline = false }: { value: string; inline?: boolean 
   )
 }
 
-function CopyButton({ value }: { value: string }) {
+function CopyButton({ value }: { value: string | string[] }) {
   const [copied, setCopied] = useState(false)
+  const str = Array.isArray(value) ? JSON.stringify(value) : value
   const copy = () => {
-    void navigator.clipboard.writeText(value)
+    void navigator.clipboard.writeText(str)
     setCopied(true)
     setTimeout(() => setCopied(false), 1500)
   }
@@ -179,20 +286,20 @@ export default function FlowExecutor({ flow, onClose, onModify }: Props) {
   )
   const [currentStep, setCurrentStep] = useState(-1)
   const [running, setRunning] = useState(false)
-  const [ctx, setCtx] = useState<ExecutionContext>({ resolved: {}, inputs: {} })
+  const execCtxRef = useRef<ExecutionContext>({ templateVars: {} })
   const [dataStoreOpen, setDataStoreOpen] = useState(false)
 
-  const nodeOutputsRef = useRef<Record<string, Record<string, string>>>({})
-  const [nodeOutputs, setNodeOutputs] = useState<Record<string, Record<string, string>>>({})
+  // nodeOutputs: per-node typed outputs, updated as steps complete
+  const nodeOutputsRef = useRef<Record<string, Record<string, string | string[]>>>({})
+  const [nodeOutputs, setNodeOutputs] = useState<Record<string, Record<string, string | string[]>>>({})
 
-  const upstreamMap = useMemo(() => buildUpstreamOutputMap(flow), [flow])
+  const upstreamInputMap = useMemo(() => buildUpstreamInputMap(flow), [flow])
   const templateVarNames = useMemo(() => collectTemplateVars(flow), [flow])
   const [templateVarValues, setTemplateVarValues] = useState<Record<string, string>>(() => {
     const defaults = loadVarDefaults()
     return Object.fromEntries(templateVarNames.map((k) => [k, defaults[k] ?? '']))
   })
 
-  // Only require wallet when the flow uses wallet-dependent plugins
   const needsWallet = flow.nodes.some((n) => WALLET_PLUGINS.has(n.plugin))
 
   useEffect(() => {
@@ -205,30 +312,22 @@ export default function FlowExecutor({ flow, onClose, onModify }: Props) {
   const updateStep = (i: number, patch: Partial<StepState>) =>
     setSteps((prev) => prev.map((s, idx) => (idx === i ? { ...s, ...patch } : s)))
 
-  const addNodeOutputs = (nodeId: string, outputs: Record<string, string>) => {
+  const addNodeOutputs = (nodeId: string, outputs: Record<string, string | string[]>) => {
     nodeOutputsRef.current = { ...nodeOutputsRef.current, [nodeId]: outputs }
     setNodeOutputs({ ...nodeOutputsRef.current })
-  }
-
-  const getUpstreamData = (nodeId: string): Record<string, string> => {
-    const data: Record<string, string> = {}
-    for (const edge of flow.edges) {
-      if (edge.to === nodeId) Object.assign(data, nodeOutputsRef.current[edge.from] ?? {})
-    }
-    return data
   }
 
   const handleConnect = async () => {
     try {
       const addr = await connectWallet()
       setWalletAddress(addr)
-      setCtx((prev) => ({ ...prev, walletAddress: addr, resolved: { ...prev.resolved, wallet_address: addr } }))
+      execCtxRef.current.walletAddress = addr
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Failed to connect wallet')
     }
   }
 
-  const runFrom = async (index: number, execCtx: ExecutionContext) => {
+  const runFrom = async (index: number) => {
     if (index >= steps.length) { setRunning(false); setCurrentStep(-1); return }
 
     const step = steps[index]!
@@ -236,11 +335,8 @@ export default function FlowExecutor({ flow, onClose, onModify }: Props) {
     const plugin = getPlugin(node.plugin)
     setCurrentStep(index)
 
-    const upstreamData = getUpstreamData(node.id)
-    Object.assign(execCtx.resolved, upstreamData)
-    execCtx.inputs = { ...execCtx.inputs, ...step.inputs }
-
     const cap = plugin?.capabilities.find((c) => c.action === node.action)
+
     if (cap?.requiresApproval && step.status === 'pending') {
       updateStep(index, { status: 'waiting' })
       return
@@ -250,21 +346,22 @@ export default function FlowExecutor({ flow, onClose, onModify }: Props) {
 
     if (!plugin) {
       updateStep(index, { status: 'done', result: { status: 'done', display: node.description } })
-      await runFrom(index + 1, execCtx)
+      await runFrom(index + 1)
       return
     }
 
     try {
-      const vars = execCtx.templateVars ?? {}
-      const rawParams = { ...upstreamData, ...(node.params ?? {}), ...step.inputs }
-      const resolvedParams = Object.fromEntries(
-        Object.entries(rawParams).map(([k, v]) => [k, substituteVars(v, vars)]),
+      const resolvedInputs = resolveInputs(
+        node,
+        flow,
+        nodeOutputsRef.current,
+        execCtxRef.current.templateVars ?? {},
+        step.inputs,
       )
 
-      const result = await plugin.execute(node.action, resolvedParams, execCtx)
+      const result = await plugin.execute(node.action, resolvedInputs, execCtxRef.current)
 
       if (result.outputs) {
-        Object.assign(execCtx.resolved, result.outputs)
         addNodeOutputs(node.id, result.outputs)
       }
 
@@ -275,7 +372,7 @@ export default function FlowExecutor({ flow, onClose, onModify }: Props) {
         updateStep(index, { status: 'waiting', result })
       } else {
         updateStep(index, { status: 'done', result })
-        await runFrom(index + 1, execCtx)
+        await runFrom(index + 1)
       }
     } catch (e) {
       updateStep(index, {
@@ -287,15 +384,12 @@ export default function FlowExecutor({ flow, onClose, onModify }: Props) {
   }
 
   const startExecution = () => {
-    const execCtx: ExecutionContext = {
+    execCtxRef.current = {
       walletAddress: walletAddress ?? undefined,
-      resolved: walletAddress ? { wallet_address: walletAddress } : {},
-      inputs: {},
       templateVars: { ...templateVarValues },
     }
-    setCtx(execCtx)
     setRunning(true)
-    void runFrom(0, execCtx)
+    void runFrom(0)
   }
 
   const handleApprove = (index: number) => {
@@ -303,10 +397,10 @@ export default function FlowExecutor({ flow, onClose, onModify }: Props) {
     if (step.node.action === 'approve') {
       updateStep(index, { status: 'done', result: { status: 'done', display: 'Approved ✓' } })
       setRunning(true)
-      void runFrom(index + 1, ctx)
+      void runFrom(index + 1)
     } else {
       setRunning(true)
-      void runFrom(index, ctx)
+      void runFrom(index)
     }
   }
 
@@ -371,7 +465,7 @@ export default function FlowExecutor({ flow, onClose, onModify }: Props) {
 
       <div className="h-px bg-zinc-100 mx-5 shrink-0" />
 
-      {/* ─ Wallet (only when needed) ─ */}
+      {/* ─ Wallet ─ */}
       {needsWallet && (
         <div className="px-5 py-3 shrink-0">
           {walletAddress ? (
@@ -385,7 +479,6 @@ export default function FlowExecutor({ flow, onClose, onModify }: Props) {
               onClick={handleConnect}
               className="w-full py-2.5 flex items-center justify-center gap-2 bg-zinc-900 hover:bg-zinc-800 active:scale-[0.98] text-white text-[11px] font-semibold rounded-xl transition-[transform,background-color] duration-150"
             >
-              <PluginIcon icon='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 240"><path fill="#E17726" d="M250.066 0L140.219 81.279l20.427-47.9z"/><path fill="#E27625" d="m6.191.096l89.181 33.289l19.396 48.528zM205.86 172.858l48.551.924l-16.968 57.642l-59.243-16.311zm-155.721 0l27.557 42.255l-59.143 16.312l-16.865-57.643z"/><path fill="#E27625" d="m112.131 69.552l1.984 64.083l-59.371-2.701l16.888-25.478l.214-.245zm31.123-.715l40.9 36.376l.212.244l16.888 25.478l-59.358 2.7zM79.435 173.044l32.418 25.259l-37.658 18.181zm97.136-.004l5.131 43.445l-37.553-18.184z"/><path fill="#D5BFB2" d="m144.978 195.922l38.107 18.452l-35.447 16.846l.368-11.134zm-33.967.008l-2.909 23.974l.239 11.303l-35.53-16.833z"/><path fill="#233447" d="m100.007 141.999l9.958 20.928l-33.903-9.932zm55.985.002l24.058 10.994l-34.014 9.929z"/><path fill="#CC6228" d="m82.026 172.83l-5.48 45.04l-29.373-44.055zm91.95.001l34.854.984l-29.483 44.057zm28.136-44.444l-25.365 25.851l-19.557-8.937l-9.363 19.684l-6.138-33.849zm-148.237 0l60.435 2.749l-6.139 33.849l-9.365-19.681l-19.453 8.935z"/><path fill="#E27525" d="m52.166 123.082l28.698 29.121l.994 28.749zm151.697-.052l-29.746 57.973l1.12-28.8zm-90.956 1.826l1.155 7.27l2.854 18.111l-1.835 55.625l-8.675-44.685l-.003-.462zm30.171-.101l6.521 35.96l-.003.462l-8.697 44.797l-.344-11.205l-1.357-44.862z"/><path fill="#F5841F" d="m177.788 151.046l-.971 24.978l-30.274 23.587l-6.12-4.324l6.86-35.335zm-99.471 0l30.399 8.906l6.86 35.335l-6.12 4.324l-30.275-23.589z"/><path fill="#C0AC9D" d="m67.018 208.858l38.732 18.352l-.164-7.837l3.241-2.845h38.334l3.358 2.835l-.248 7.831l38.487-18.29l-18.728 15.476l-22.645 15.553h-38.869l-22.63-15.617z"/><path fill="#161616" d="m142.204 193.479l5.476 3.869l3.209 25.604l-4.644-3.921h-36.476l-4.556 4l3.104-25.681l5.478-3.871z"/><path fill="#763E1A" d="M242.814 2.25L256 41.807l-8.235 39.997l5.864 4.523l-7.935 6.054l5.964 4.606l-7.897 7.191l4.848 3.511l-12.866 15.026l-52.77-15.365l-.457-.245l-38.027-32.078zm-229.628 0l98.326 72.777l-38.028 32.078l-.457.245l-52.77 15.365l-12.866-15.026l4.844-3.508l-7.892-7.194l5.952-4.601l-8.054-6.071l6.085-4.526L0 41.809z"/><path fill="#F5841F" d="m180.392 103.99l55.913 16.279l18.165 55.986h-47.924l-33.02.416l24.014-46.808zm-104.784 0l-17.151 25.873l24.017 46.808l-33.005-.416H1.631l18.063-55.985zm87.776-70.878l-15.639 42.239l-3.319 57.06l-1.27 17.885l-.101 45.688h-30.111l-.098-45.602l-1.274-17.986l-3.32-57.045l-15.637-42.239z"/></svg>' size={14} />
               Connect Wallet
             </button>
           )}
@@ -421,12 +514,17 @@ export default function FlowExecutor({ flow, onClose, onModify }: Props) {
           const node = step.node
           const plugin = getPlugin(node.plugin)
           const cap = plugin?.capabilities.find((c) => c.action === node.action)
-          type FieldDef = { key: string; label: string; placeholder: string; inputType: string; required?: boolean }
-          const allInputDefs = (cap?.params ?? node.requiredInputs ?? []) as FieldDef[]
-          const outputKeys = cap?.outputs ?? []
-          const upstreamKeys = upstreamMap.get(node.id) ?? new Set<string>()
+          const inputDefs = cap?.inputs ?? []
+          const outputDefs = cap?.outputs ?? []
+          const upstreamKeys = upstreamInputMap.get(node.id) ?? new Set<string>()
           const isCurrent = i === currentStep
-          const runtimeUpstream = getUpstreamData(node.id)
+
+          // Get runtime upstream values for display
+          const runtimeResolved = resolveInputs(
+            node, flow, nodeOutputsRef.current,
+            execCtxRef.current.templateVars ?? templateVarValues,
+            step.inputs,
+          )
 
           return (
             <div
@@ -464,29 +562,31 @@ export default function FlowExecutor({ flow, onClose, onModify }: Props) {
               </div>
 
               {/* Inputs */}
-              {allInputDefs.length > 0 && (
+              {inputDefs.length > 0 && (
                 <div className="px-3 pb-2 space-y-1.5">
                   <div className="text-[9px] font-semibold text-zinc-400 uppercase tracking-widest">Inputs</div>
 
-                  {allInputDefs.map((field) => {
+                  {inputDefs.map((field) => {
                     const paramVal = node.params?.[field.key]
                     const userVal = step.inputs[field.key]
-                    const runtimeVal = runtimeUpstream[field.key]
-                    const resolvedCtxVal = ctx.resolved[field.key]
-                    const isFromUpstream = !paramVal && !userVal && (upstreamKeys.has(field.key) || runtimeVal)
-                    const actualUpstreamVal = runtimeVal ?? resolvedCtxVal
+                    const isFromUpstream = !paramVal && !userVal && upstreamKeys.has(field.key)
+                    const runtimeVal = runtimeResolved[field.key]
                     const needsManual = !paramVal && !userVal && !isFromUpstream
 
                     if (paramVal) {
-                      const paramStr = typeof paramVal === 'string' ? paramVal : String(paramVal)
-                      const resolved = substituteVars(paramStr, templateVarValues)
-                      const hasVar = /\{\{/.test(paramStr)
+                      const resolved = substituteVars(paramVal, templateVarValues)
+                      const hasVar = /\{\{/.test(paramVal)
                       return (
                         <div key={field.key} className="group flex items-center gap-2">
-                          <span className="text-[10px] text-zinc-400 w-24 shrink-0 truncate">{field.label ?? field.key}</span>
-                          <span className={`text-[10px] font-mono border rounded px-2 py-0.5 truncate max-w-[140px] ${
-                            hasVar && resolved !== paramVal ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-zinc-100 border-zinc-200 text-zinc-700'
-                          }`}>{resolved}</span>
+                          <span className="text-[10px] text-zinc-400 w-24 shrink-0 truncate">{field.label}</span>
+                          <div className="flex items-center gap-1">
+                            <span className={`text-[9px] border rounded px-1.5 py-0.5 font-mono shrink-0 ${field.type === 'string[]' ? 'text-violet-500 border-violet-200 bg-violet-50' : 'text-zinc-400 border-zinc-200 bg-zinc-50'}`}>
+                              {field.type}
+                            </span>
+                            <span className={`text-[10px] font-mono border rounded px-2 py-0.5 truncate max-w-[120px] ${
+                              hasVar && resolved !== paramVal ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-zinc-100 border-zinc-200 text-zinc-700'
+                            }`}>{resolved}</span>
+                          </div>
                           <CopyButton value={resolved} />
                         </div>
                       )
@@ -495,9 +595,14 @@ export default function FlowExecutor({ flow, onClose, onModify }: Props) {
                     if (isFromUpstream) {
                       return (
                         <div key={field.key} className="group flex items-center gap-2">
-                          <span className="text-[10px] text-zinc-400 w-24 shrink-0 truncate">{field.label ?? field.key}</span>
-                          {actualUpstreamVal ? (
-                            <><DataValue value={actualUpstreamVal} inline /><CopyButton value={actualUpstreamVal} /></>
+                          <span className="text-[10px] text-zinc-400 w-24 shrink-0 truncate">{field.label}</span>
+                          {runtimeVal !== undefined ? (
+                            <><div className="flex items-center gap-1 flex-1 min-w-0">
+                              <span className={`text-[9px] border rounded px-1.5 py-0.5 font-mono shrink-0 ${field.type === 'string[]' ? 'text-violet-500 border-violet-200 bg-violet-50' : 'text-zinc-400 border-zinc-200 bg-zinc-50'}`}>
+                                {field.type}
+                              </span>
+                              <div className="flex-1 min-w-0"><DataValue value={runtimeVal} inline /></div>
+                            </div><CopyButton value={runtimeVal} /></>
                           ) : (
                             <span className="text-[10px] text-amber-600 bg-amber-50 border border-amber-200 rounded px-2 py-0.5 italic">
                               auto · from upstream ↑
@@ -510,7 +615,7 @@ export default function FlowExecutor({ flow, onClose, onModify }: Props) {
                     if (userVal && step.status !== 'pending' && step.status !== 'waiting') {
                       return (
                         <div key={field.key} className="group flex items-center gap-2">
-                          <span className="text-[10px] text-zinc-400 w-24 shrink-0 truncate">{field.label ?? field.key}</span>
+                          <span className="text-[10px] text-zinc-400 w-24 shrink-0 truncate">{field.label}</span>
                           <span className="text-[10px] font-mono bg-blue-50 border border-blue-200 text-blue-700 rounded px-2 py-0.5 truncate max-w-[140px]">{userVal}</span>
                           <CopyButton value={userVal} />
                         </div>
@@ -521,7 +626,10 @@ export default function FlowExecutor({ flow, onClose, onModify }: Props) {
                       return (
                         <div key={field.key}>
                           <label className="text-[9px] text-zinc-400 uppercase tracking-wide block mb-0.5">
-                            {field.label ?? field.key}
+                            {field.label}
+                            <span className={`ml-1 text-[8px] font-mono rounded px-1 ${field.type === 'string[]' ? 'text-violet-500 bg-violet-50' : 'text-zinc-400 bg-zinc-100'}`}>
+                              {field.type}
+                            </span>
                             {field.required && <span className="text-red-400 ml-1">*</span>}
                           </label>
                           <input
@@ -541,15 +649,18 @@ export default function FlowExecutor({ flow, onClose, onModify }: Props) {
               )}
 
               {/* Outputs */}
-              {outputKeys.length > 0 && step.status !== 'pending' && (
+              {outputDefs.length > 0 && step.status !== 'pending' && (
                 <div className="px-3 pb-2 space-y-1.5">
                   <div className="text-[9px] font-semibold text-zinc-400 uppercase tracking-widest">Outputs</div>
-                  {outputKeys.map((key) => {
-                    const val = step.result?.outputs?.[key]
+                  {outputDefs.map((outDef) => {
+                    const val = step.result?.outputs?.[outDef.key]
                     return (
-                      <div key={key} className="group flex items-start gap-2">
-                        <span className="text-[10px] font-mono text-zinc-400 w-24 shrink-0 truncate pt-0.5">{key}</span>
-                        {val ? (
+                      <div key={outDef.key} className="group flex items-start gap-2">
+                        <span className="text-[10px] font-mono text-zinc-400 w-20 shrink-0 truncate pt-0.5">{outDef.key}</span>
+                        <span className={`text-[9px] border rounded px-1.5 py-0.5 font-mono shrink-0 mt-0.5 ${outDef.type === 'string[]' ? 'text-violet-500 border-violet-200 bg-violet-50' : 'text-zinc-300 border-zinc-200 bg-zinc-50'}`}>
+                          {outDef.type}
+                        </span>
+                        {val !== undefined ? (
                           <><div className="flex-1 min-w-0"><DataValue value={val} /></div><CopyButton value={val} /></>
                         ) : (
                           <span className="text-[10px] text-zinc-300 italic">{step.status === 'running' ? '…' : '—'}</span>
@@ -664,8 +775,8 @@ export default function FlowExecutor({ flow, onClose, onModify }: Props) {
         ) : (
           <div className="flex items-center justify-center gap-2 py-1 text-xs text-zinc-400">
             {running
-              ? <><span className="inline-block w-3 h-3 rounded-full border-2 border-zinc-300 border-t-transparent animate-spin" />Executing…</>
-              : 'Waiting for approval'
+              ? <><span className="inline-block w-3 h-3 rounded-full border-2 border-zinc-400 border-t-transparent animate-spin" /> Running…</>
+              : <span>Stopped</span>
             }
           </div>
         )}

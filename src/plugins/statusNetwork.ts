@@ -1,6 +1,5 @@
 import type { Plugin, ExecutionContext, PluginResult } from './types.ts'
 
-// Status Network Sepolia Testnet
 const STATUS_NETWORK_RPC = 'https://public.sepolia.rpc.status.network'
 const STATUS_NETWORK_CHAIN_ID = '0x39B6F' // 236527
 
@@ -9,7 +8,10 @@ export const StatusNetworkPlugin: Plugin = {
   name: 'Status Network',
   description: 'Gasless transactions and smart contract deployment on Status Network Sepolia',
   aiDescription:
-    'Status Network plugin — a Layer 2 where gas is free (gasPrice=0). Actions: send_gasless_tx (send a transaction on Status Network Sepolia with no gas cost — great for micropayments and agent-triggered actions), deploy_contract (deploy a smart contract to Status Network Sepolia testnet with gasless execution). Use this for any action that should be gas-free.',
+    'Status Network — a Layer 2 where gas is free (gasPrice=0). ' +
+    'send_gasless_tx(to*, value?, data?) → tx_hash — send with zero gas. ' +
+    'deploy_contract(bytecode*) → tx_hash, contract_address — deploy gaslessly. ' +
+    'Wire: ens:resolve_name→send_gasless_tx needs wire {"address":"to"}.',
   icon: 'https://status.network/logo.svg',
   color: 'green',
   prizeTrack: 'Status Network Go Gasless ($50 qualifying)',
@@ -18,31 +20,35 @@ export const StatusNetworkPlugin: Plugin = {
       action: 'send_gasless_tx',
       label: 'Send Gasless Tx',
       description: 'Send a transaction on Status Network with zero gas cost',
-      params: [
-        { key: 'to', label: 'Recipient', placeholder: '0x... or ENS', inputType: 'address', required: true },
-        { key: 'data', label: 'Calldata (optional)', placeholder: '0x', inputType: 'text', required: false },
-        { key: 'value', label: 'Value (ETH, optional)', placeholder: '0', inputType: 'eth_amount', required: false },
+      inputs: [
+        { key: 'to', label: 'Recipient', type: 'string', required: true, placeholder: '0x...' },
+        { key: 'value', label: 'Value (ETH)', type: 'string', required: false, placeholder: '0' },
+        { key: 'data', label: 'Calldata', type: 'string', required: false, placeholder: '0x' },
       ],
-      outputs: ['tx_hash'],
+      outputs: [
+        { key: 'tx_hash', label: 'Transaction Hash', type: 'string' },
+      ],
       requiresApproval: true,
     },
     {
       action: 'deploy_contract',
       label: 'Deploy Contract',
       description: 'Deploy a smart contract to Status Network Sepolia gaslessly',
-      params: [
-        { key: 'bytecode', label: 'Contract Bytecode', placeholder: '0x608060...', inputType: 'text', required: true },
+      inputs: [
+        { key: 'bytecode', label: 'Contract Bytecode', type: 'string', required: true, placeholder: '0x608060...' },
       ],
-      outputs: ['contract_address', 'tx_hash'],
+      outputs: [
+        { key: 'tx_hash', label: 'Transaction Hash', type: 'string' },
+        { key: 'contract_address', label: 'Contract Address', type: 'string' },
+      ],
       requiresApproval: true,
     },
   ],
 
-  async execute(action, params, ctx: ExecutionContext): Promise<PluginResult> {
-    const from = ctx.walletAddress ?? ctx.resolved.wallet_address
+  async execute(action, inputs, ctx: ExecutionContext): Promise<PluginResult> {
+    const from = ctx.walletAddress
     if (!from) return { status: 'error', error: 'Wallet not connected' }
 
-    // Switch MetaMask to Status Network
     try {
       await window.ethereum?.request({
         method: 'wallet_addEthereumChain',
@@ -64,10 +70,10 @@ export const StatusNetworkPlugin: Plugin = {
 
     switch (action) {
       case 'send_gasless_tx': {
-        const to = ctx.resolved.resolved_address ?? ctx.resolved.to ?? params.to ?? ctx.inputs.to
+        const to = inputs.to as string
         if (!to) return { status: 'error', error: 'Recipient required' }
 
-        const valueEth = params.value ?? ctx.inputs.value ?? '0'
+        const valueEth = (inputs.value as string) ?? '0'
         const valueWei = BigInt(Math.round(parseFloat(valueEth) * 1e18))
 
         try {
@@ -77,12 +83,11 @@ export const StatusNetworkPlugin: Plugin = {
               from,
               to,
               value: '0x' + valueWei.toString(16),
-              data: params.data ?? '0x',
-              gasPrice: '0x0',  // Gasless!
+              data: (inputs.data as string) ?? '0x',
+              gasPrice: '0x0',
             }],
           })) as string
 
-          ctx.resolved.tx_hash = txHash
           return {
             status: 'done',
             outputs: { tx_hash: txHash },
@@ -96,20 +101,15 @@ export const StatusNetworkPlugin: Plugin = {
       }
 
       case 'deploy_contract': {
-        const bytecode = params.bytecode ?? ctx.inputs.bytecode
+        const bytecode = inputs.bytecode as string
         if (!bytecode) return { status: 'error', error: 'Bytecode required' }
 
         try {
           const txHash = (await window.ethereum?.request({
             method: 'eth_sendTransaction',
-            params: [{
-              from,
-              data: bytecode,
-              gasPrice: '0x0',
-            }],
+            params: [{ from, data: bytecode, gasPrice: '0x0' }],
           })) as string
 
-          ctx.resolved.deploy_tx = txHash
           return {
             status: 'done',
             outputs: { tx_hash: txHash },

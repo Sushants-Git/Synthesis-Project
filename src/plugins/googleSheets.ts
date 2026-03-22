@@ -5,12 +5,11 @@ export const GoogleSheetsPlugin: Plugin = {
   name: 'Google Sheets',
   description: 'Read rows from a public Google Sheet — no API key required',
   aiDescription:
-    'Google Sheets integration. Reads data from a public Google Sheet — no API key needed. ' +
-    'Action: fetch_rows — takes sheet_url (full Google Sheets URL) and optional column_name (exact column header to extract, e.g. "wallet_address" — defaults to first column if omitted). ' +
-    'Outputs: rows (flat JSON array of values from the specified column, for wallet lists), ' +
-    'table (2D JSON array with header row — for display), count (number of data rows). ' +
+    'Google Sheets. fetch_rows(sheet_url*, column_name*) → rows[], table(JSON), count. ' +
+    'rows is a string[] of values from the specified column. ' +
     'Sheet must be shared as "Anyone with the link can view". ' +
-    'Connect rows/wallets output to metamask:batch_send to send ETH to each address.',
+    'Wire: sheets→ens:resolve_batch needs wire {"rows":"names"}. ' +
+    'Wire: sheets→metamask:batch_send needs wire {"rows":"recipients"}.',
   icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="#000000" d="M7 19h10v-7H7Zm5.75-4.25V13.5h2.75v1.25Zm0 2.75v-1.25h2.75v1.25ZM8.5 14.75V13.5h2.75v1.25Zm0 2.75v-1.25h2.75v1.25ZM6 22q-.825 0-1.412-.587Q4 20.825 4 20V4q0-.825.588-1.413Q5.175 2 6 2h8l6 6v12q0 .825-.587 1.413Q18.825 22 18 22Zm7-13h5l-5-5Z"/></svg>',
   color: 'green',
   capabilities: [
@@ -18,32 +17,36 @@ export const GoogleSheetsPlugin: Plugin = {
       action: 'fetch_rows',
       label: 'Fetch Rows',
       description: 'Read all data from a public Google Sheet',
-      params: [
+      inputs: [
         {
           key: 'sheet_url',
           label: 'Sheet URL',
-          placeholder: 'https://docs.google.com/spreadsheets/d/...',
-          inputType: 'text',
+          type: 'string',
           required: true,
+          placeholder: 'https://docs.google.com/spreadsheets/d/...',
         },
         {
           key: 'column_name',
           label: 'Column Name',
-          placeholder: 'e.g. receiver — exact header of the column to extract',
-          inputType: 'text',
+          type: 'string',
           required: true,
+          placeholder: 'wallet_address (exact column header)',
         },
       ],
-      outputs: ['rows', 'wallets', 'table', 'count'],
+      outputs: [
+        { key: 'rows', label: 'Row Values', type: 'string[]' },
+        { key: 'table', label: 'Full Table (JSON)', type: 'string' },
+        { key: 'count', label: 'Row Count', type: 'string' },
+      ],
     },
   ],
 
-  async execute(action: string, params: Record<string, string>, ctx: ExecutionContext): Promise<PluginResult> {
+  async execute(action, inputs, _ctx: ExecutionContext): Promise<PluginResult> {
     if (action !== 'fetch_rows') {
       return { status: 'error', error: `Unknown action: ${action}` }
     }
 
-    const sheetUrl = params.sheet_url ?? ctx.inputs.sheet_url
+    const sheetUrl = inputs.sheet_url as string
     if (!sheetUrl) return { status: 'error', error: 'Sheet URL required' }
 
     const idMatch = sheetUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/)
@@ -66,7 +69,6 @@ export const GoogleSheetsPlugin: Plugin = {
       }
 
       const text = await resp.text()
-      // gviz response is wrapped: /*O_o*/\ngoogle.visualization.Query.setResponse({...});
       const jsonStr = text.replace(/^[^{]*/, '').replace(/\s*\);?\s*$/, '')
       const data = JSON.parse(jsonStr) as {
         table?: {
@@ -78,55 +80,35 @@ export const GoogleSheetsPlugin: Plugin = {
       const cols = data.table?.cols ?? []
       const tableRows = data.table?.rows ?? []
 
-      // Build header row from column labels
       const headers = cols.map((c) => c.label || c.id || '?')
 
-      // Build 2D data grid (all columns)
       const bodyRows = tableRows
         .map((row) =>
           cols.map((_, j) => {
             const cell = row.c?.[j]
             if (!cell || cell.v === null || cell.v === undefined) return ''
-            // Prefer formatted string (f) for numbers/dates, else raw value
             return cell.f ?? String(cell.v)
           }),
         )
         .filter((row) => row.some((v) => v !== ''))
 
-      // Flat list from a specific column — auto-detect address column if not specified
-      const columnName = params.column_name ?? ctx.inputs.column_name
-      let resolvedColIndex: number
-
-      if (columnName) {
-        const colIndex = headers.findIndex((h) => h.toLowerCase() === columnName.toLowerCase())
-        if (colIndex === -1) {
-          return {
-            status: 'error',
-            error: `Column "${columnName}" not found. Available columns: ${headers.join(', ')}`,
-          }
-        }
-        resolvedColIndex = colIndex
-      } else {
+      const columnName = inputs.column_name as string
+      const colIndex = headers.findIndex((h) => h.toLowerCase() === columnName.toLowerCase())
+      if (colIndex === -1) {
         return {
           status: 'error',
-          error: `column_name is required. Available columns: ${headers.join(', ')}`,
+          error: `Column "${columnName}" not found. Available: ${headers.join(', ')}`,
         }
       }
 
-      const firstColValues = bodyRows.map((row) => row[resolvedColIndex] ?? '').filter(Boolean)
-
-      // Full 2D table with header row for display
+      const rows = bodyRows.map((row) => row[colIndex] ?? '').filter(Boolean)
       const tableGrid = headers.length > 0 ? [headers, ...bodyRows] : bodyRows
-
-      const rowsJson = JSON.stringify(firstColValues)
-      const tableJson = JSON.stringify(tableGrid)
 
       return {
         status: 'done',
         outputs: {
-          rows: rowsJson,
-          wallets: rowsJson,
-          table: tableJson,
+          rows,
+          table: JSON.stringify(tableGrid),
           count: String(bodyRows.length),
         },
         display: `Fetched ${bodyRows.length} rows × ${cols.length} columns`,

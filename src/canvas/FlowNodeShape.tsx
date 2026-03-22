@@ -26,7 +26,7 @@ export type FlowNodeShape = TLBaseShape<'flow-node', FlowNodeShapeProps>
 
 export function computeNodeHeight(pluginId: string, action: string): number {
   const cap = getPlugin(pluginId)?.capabilities.find((c) => c.action === action)
-  const inputCount = cap?.params?.length ?? 0
+  const inputCount = cap?.inputs?.length ?? 0
   const outputCount = cap?.outputs?.length ?? 0
 
   let h = 58  // header section (icon + name + label + desc)
@@ -58,8 +58,8 @@ export class FlowNodeShapeUtil extends ShapeUtil<FlowNodeShape> {
     const { label, description, params, icon, pluginName, accentColor, w, h, plugin, action } = shape.props
 
     const cap = getPlugin(plugin)?.capabilities.find((c) => c.action === action)
-    const inputDefs = cap?.params ?? []
-    const outputKeys = cap?.outputs ?? []
+    const inputDefs = cap?.inputs ?? []
+    const outputDefs = cap?.outputs ?? []
 
     const mono: React.CSSProperties = { fontFamily: 'Geist Mono, ui-monospace, monospace' }
     const sans: React.CSSProperties = { fontFamily: 'Geist, ui-sans-serif, sans-serif' }
@@ -134,7 +134,7 @@ export class FlowNodeShapeUtil extends ShapeUtil<FlowNodeShape> {
           </div>
 
           {/* ── Scrollable I/O body ── */}
-          {(inputDefs.length > 0 || outputKeys.length > 0) && (
+          {(inputDefs.length > 0 || outputDefs.length > 0) && (
             <div
               style={{
                 flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden',
@@ -159,9 +159,9 @@ export class FlowNodeShapeUtil extends ShapeUtil<FlowNodeShape> {
                   {inputDefs.map((inp) => {
                     const filled = params[inp.key]
                     const valStr = filled ? (typeof filled === 'string' ? filled : String(filled)) : null
+                    const isArray = inp.type === 'string[]'
                     return (
                       <div key={inp.key} style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 4, minHeight: 18 }}>
-                        {/* Port indicator */}
                         <div style={{
                           width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
                           background: filled ? accentColor : 'transparent',
@@ -171,14 +171,19 @@ export class FlowNodeShapeUtil extends ShapeUtil<FlowNodeShape> {
                         <span style={{ fontSize: 9.5, color: '#3f3f46', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {inp.label}
                         </span>
+                        {isArray && (
+                          <span style={{ fontSize: 7, color: '#a78bfa', background: '#f5f3ff', border: '1px solid #e9d5ff', borderRadius: 3, padding: '1px 4px', flexShrink: 0, ...mono }}>
+                            []
+                          </span>
+                        )}
                         {valStr ? (
                           <span style={{
                             fontSize: 8, ...mono, color: '#3f3f46',
                             background: `${accentColor}12`, border: `1px solid ${accentColor}25`,
                             borderRadius: 4, padding: '1px 5px',
-                            maxWidth: 68, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                            maxWidth: 60, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                           }}>
-                            {valStr.length > 12 ? valStr.slice(0, 12) + '…' : valStr}
+                            {valStr.length > 10 ? valStr.slice(0, 10) + '…' : valStr}
                           </span>
                         ) : (
                           <span style={{ fontSize: 8, color: '#c4c4c8', fontStyle: 'italic' }}>
@@ -192,12 +197,12 @@ export class FlowNodeShapeUtil extends ShapeUtil<FlowNodeShape> {
               )}
 
               {/* Divider between IN and OUT */}
-              {inputDefs.length > 0 && outputKeys.length > 0 && (
+              {inputDefs.length > 0 && outputDefs.length > 0 && (
                 <div style={{ height: 1, background: '#f4f4f5', margin: '0 12px' }} />
               )}
 
               {/* Outputs */}
-              {outputKeys.length > 0 && (
+              {outputDefs.length > 0 && (
                 <div style={{ padding: '6px 12px 8px' }}>
                   <div style={{
                     fontSize: 7.5, fontWeight: 700, color: '#94a3b8',
@@ -205,15 +210,20 @@ export class FlowNodeShapeUtil extends ShapeUtil<FlowNodeShape> {
                   }}>
                     Outputs
                   </div>
-                  {outputKeys.map((key) => (
-                    <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 3, minHeight: 16 }}>
+                  {outputDefs.map((out) => (
+                    <div key={out.key} style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 3, minHeight: 16 }}>
                       <div style={{
                         width: 6, height: 6, borderRadius: 2, flexShrink: 0,
-                        background: '#22c55e',
+                        background: out.type === 'string[]' ? '#8b5cf6' : '#22c55e',
                       }} />
                       <span style={{ fontSize: 9.5, color: '#3f3f46', ...mono, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {key}
+                        {out.key}
                       </span>
+                      {out.type === 'string[]' && (
+                        <span style={{ fontSize: 7, color: '#a78bfa', background: '#f5f3ff', border: '1px solid #e9d5ff', borderRadius: 3, padding: '1px 4px', flexShrink: 0, ...mono }}>
+                          []
+                        </span>
+                      )}
                     </div>
                   ))}
                 </div>

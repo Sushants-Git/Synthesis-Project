@@ -284,7 +284,7 @@ export default function FlowCanvas() {
           params: {},
         },
       ],
-      edges: [{ from: 'n1', to: 'n2', label: cap?.outputs?.[0] ?? 'result' }],
+      edges: [{ from: 'n1', to: 'n2', label: cap?.outputs?.[0]?.key ?? 'result' }],
     }
 
     const approxW = 2 * 220 + 80 + 64

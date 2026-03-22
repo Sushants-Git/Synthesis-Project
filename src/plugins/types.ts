@@ -1,39 +1,38 @@
-export interface ParamDef {
+export type IOType = 'string' | 'string[]'
+
+export interface InputDef {
   key: string
   label: string
-  placeholder: string
-  inputType: 'address' | 'eth_amount' | 'text' | 'ens_name' | 'select'
+  type: IOType
   required: boolean
-  options?: string[]
+  placeholder?: string
+}
+
+export interface OutputDef {
+  key: string
+  label: string
+  type: IOType
+  description?: string
 }
 
 export interface PluginCapability {
   action: string
   label: string
   description: string
-  params: ParamDef[]
-  /** Keys this action produces for downstream nodes */
-  outputs: string[]
+  inputs: InputDef[]
+  outputs: OutputDef[]
   /** If true, this step pauses and waits for explicit user confirmation */
   requiresApproval?: boolean
 }
 
 export interface ExecutionContext {
   walletAddress?: string
-  /** Accumulated outputs from previous steps */
-  resolved: Record<string, string>
-  /** User-entered inputs for this run */
-  inputs: Record<string, string>
-  /**
-   * Template variable values filled in by the user before execution.
-   * Substituted into {{variable}} placeholders in executeUrl and params.
-   */
   templateVars?: Record<string, string>
 }
 
 export interface PluginResult {
   status: 'done' | 'error' | 'waiting'
-  outputs?: Record<string, string>
+  outputs?: Record<string, string | string[]>
   display?: string
   error?: string
   txHash?: string
@@ -51,7 +50,6 @@ export interface Plugin {
   color: string
   /** 'hard' = built-in code plugin; 'soft' = user-built API chain */
   category?: 'hard' | 'soft'
-  /** Prize track this plugin targets */
   prizeTrack?: string
   /**
    * For manifest-based plugins: the executeUrl (may contain {{variable}} placeholders).
@@ -61,16 +59,15 @@ export interface Plugin {
   capabilities: PluginCapability[]
   execute(
     action: string,
-    params: Record<string, string>,
+    inputs: Record<string, string | string[]>,
     ctx: ExecutionContext,
   ): Promise<PluginResult>
 }
 
 /**
  * A JSON-serializable plugin definition.
- * Custom plugins are defined as manifests — no JS required.
  * When `executeUrl` is set, execute() POSTs to that URL and expects a PluginResult back.
- * The server receives: { action, params, context: ExecutionContext }
+ * The server receives: { action, inputs, context: ExecutionContext }
  */
 export interface PluginManifest {
   id: string
@@ -82,7 +79,7 @@ export interface PluginManifest {
   color: string
   prizeTrack?: string
   /**
-   * Your server endpoint. Receives POST { action, params, context } → PluginResult.
+   * Your server endpoint. Receives POST { action, inputs, context } → PluginResult.
    * Must respond with JSON and include CORS headers (Access-Control-Allow-Origin: *).
    */
   executeUrl?: string

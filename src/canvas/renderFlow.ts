@@ -26,15 +26,19 @@ function edgeLabel(flow: FlowSpec, fromId: string, toId: string, fallback: strin
   const fromCap = fromNode ? getPlugin(fromNode.plugin)?.capabilities.find((c) => c.action === fromNode.action) : null
   const toCap = toNode ? getPlugin(toNode.plugin)?.capabilities.find((c) => c.action === toNode.action) : null
 
-  const fromOutputs = fromCap?.outputs ?? []
-  const toInputKeys = new Set([
-    ...(toCap?.params.map((p) => p.key) ?? []),
-    ...(toNode?.requiredInputs?.map((r) => r.key) ?? []),
-  ])
+  const fromOutputKeys = (fromCap?.outputs ?? []).map((o) => o.key)
+  const toInputKeys = new Set((toCap?.inputs ?? []).map((i) => i.key))
+
+  // Check edge wire mapping first
+  const edge = flow.edges.find((e) => e.from === fromId && e.to === toId)
+  if (edge?.wire) {
+    const firstWireFrom = Object.keys(edge.wire)[0]
+    if (firstWireFrom) return firstWireFrom
+  }
 
   // Prefer a key that is both an output of `from` and an input of `to`
-  const matched = fromOutputs.find((k) => toInputKeys.has(k))
-  return matched ?? fromOutputs[0] ?? fallback
+  const matched = fromOutputKeys.find((k) => toInputKeys.has(k))
+  return matched ?? fromOutputKeys[0] ?? fallback
 }
 
 export function renderFlowIntoFrame(editor: Editor, flow: FlowSpec, frameId: TLShapeId) {

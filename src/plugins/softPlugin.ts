@@ -1,4 +1,4 @@
-import type { Plugin, PluginResult, ExecutionContext } from './types.ts'
+import type { Plugin, PluginResult, ExecutionContext, IOType } from './types.ts'
 
 export interface OutputMapping {
   path: string   // dot-notation path into response JSON: e.g. 'data.user.address'
@@ -27,6 +27,7 @@ export interface SoftPluginInput {
   label: string
   placeholder: string
   required: boolean
+  type?: IOType
 }
 
 export interface SoftPluginDef {
@@ -87,10 +88,9 @@ function subst(template: string, vars: Record<string, string>): string {
 export async function executeSoftPlugin(
   def: SoftPluginDef,
   params: Record<string, string>,
-  ctx: ExecutionContext,
+  _ctx: ExecutionContext,
 ): Promise<PluginResult> {
-  // Merge all available variables: upstream resolved + user inputs + node params
-  const vars: Record<string, string> = { ...ctx.resolved, ...ctx.inputs, ...params }
+  const vars: Record<string, string> = { ...params }
   const allOutputs: Record<string, string> = {}
 
   for (const step of def.steps) {
@@ -199,16 +199,23 @@ export function buildSoftPlugin(def: SoftPluginDef): Plugin {
         action: 'execute',
         label: def.name,
         description: def.description,
-        params: def.inputs.map((i) => ({
+        inputs: def.inputs.map((i) => ({
           key: i.key,
           label: i.label,
-          placeholder: i.placeholder,
-          inputType: 'text' as const,
+          type: (i.type ?? 'string') as IOType,
           required: i.required,
+          placeholder: i.placeholder,
         })),
-        outputs: outputKeys,
+        outputs: outputKeys.map((k) => ({ key: k, label: k, type: 'string' as IOType })),
       },
     ],
-    execute: (_action, params, ctx) => executeSoftPlugin(def, params, ctx),
+    execute: (_action, inputs, ctx) => executeSoftPlugin(
+      def,
+      // Coerce typed inputs to Record<string, string> for soft plugin's var substitution
+      Object.fromEntries(
+        Object.entries(inputs).map(([k, v]) => [k, Array.isArray(v) ? JSON.stringify(v) : v]),
+      ),
+      ctx,
+    ),
   }
 }

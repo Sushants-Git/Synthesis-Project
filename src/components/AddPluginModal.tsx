@@ -24,30 +24,15 @@ const TEMPLATE_GOOGLE_SHEETS: PluginManifest = {
       action: 'fetch_wallets',
       label: 'Fetch Wallet List',
       description: 'Read a column of wallet addresses from a Google Sheet',
-      params: [
-        {
-          key: 'sheet_id',
-          label: 'Sheet ID',
-          placeholder: '1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms',
-          inputType: 'text',
-          required: true,
-        },
-        {
-          key: 'range',
-          label: 'Column Range (A1 notation)',
-          placeholder: 'Sheet1!A2:A',
-          inputType: 'text',
-          required: true,
-        },
-        {
-          key: 'api_key',
-          label: 'Google Sheets API Key',
-          placeholder: 'AIzaSy...',
-          inputType: 'text',
-          required: true,
-        },
+      inputs: [
+        { key: 'sheet_id', label: 'Sheet ID', type: 'string', placeholder: '1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms', required: true },
+        { key: 'range', label: 'Column Range (A1 notation)', type: 'string', placeholder: 'Sheet1!A2:A', required: true },
+        { key: 'api_key', label: 'Google Sheets API Key', type: 'string', placeholder: 'AIzaSy...', required: true },
       ],
-      outputs: ['wallets', 'count'],
+      outputs: [
+        { key: 'wallets', label: 'Wallet Addresses', type: 'string[]' },
+        { key: 'count', label: 'Count', type: 'string' },
+      ],
       requiresApproval: false,
     },
   ],
@@ -67,16 +52,10 @@ const TEMPLATE_HTTP_WEBHOOK: PluginManifest = {
       action: 'call',
       label: 'Call Endpoint',
       description: 'POST to your API and forward the result',
-      params: [
-        {
-          key: 'input',
-          label: 'Input',
-          placeholder: 'Any value to pass to your endpoint',
-          inputType: 'text',
-          required: false,
-        },
+      inputs: [
+        { key: 'input', label: 'Input', type: 'string', placeholder: 'Any value to pass to your endpoint', required: false },
       ],
-      outputs: ['result'],
+      outputs: [{ key: 'result', label: 'Result', type: 'string' }],
       requiresApproval: false,
     },
   ],
@@ -95,16 +74,10 @@ const TEMPLATE_BLANK: PluginManifest = {
       action: 'my_action',
       label: 'My Action',
       description: 'What this action does',
-      params: [
-        {
-          key: 'input',
-          label: 'Input',
-          placeholder: 'Enter a value',
-          inputType: 'text',
-          required: true,
-        },
+      inputs: [
+        { key: 'input', label: 'Input', type: 'string', placeholder: 'Enter a value', required: true },
       ],
-      outputs: ['result'],
+      outputs: [{ key: 'result', label: 'Result', type: 'string' }],
       requiresApproval: false,
     },
   ],
