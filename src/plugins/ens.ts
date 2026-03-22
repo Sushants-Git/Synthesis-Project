@@ -68,8 +68,21 @@ export const ENSPlugin: Plugin = {
       }
 
       case 'resolve_batch': {
-        const names = inputs.names as string[]
-        if (!names?.length) return { status: 'error', error: 'Names list required' }
+        const raw = inputs.names
+        let names: string[]
+        if (Array.isArray(raw)) {
+          names = raw
+        } else if (typeof raw === 'string' && raw.trim()) {
+          try {
+            const parsed = JSON.parse(raw)
+            names = Array.isArray(parsed) ? parsed.map(String) : [raw]
+          } catch {
+            names = raw.split(/[,\n]+/).map((s) => s.trim()).filter(Boolean)
+          }
+        } else {
+          names = []
+        }
+        if (!names.length) return { status: 'error', error: 'Names list required' }
 
         const results: Array<{ name: string; address: string | null }> = []
         for (const name of names) {

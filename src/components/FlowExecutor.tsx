@@ -40,8 +40,50 @@ const WALLET_PLUGINS = new Set(['metamask', 'ens', 'status', 'self'])
 
 function coerce(val: string | string[], targetType: IOType): string | string[] {
   if (targetType === 'string' && Array.isArray(val)) return val[0] ?? ''
-  if (targetType === 'string[]' && !Array.isArray(val)) return [val]
+  if (targetType === 'string[]' && !Array.isArray(val)) {
+    // Try JSON parse first, then comma/newline split
+    try {
+      const parsed = JSON.parse(val)
+      return Array.isArray(parsed) ? parsed.map(String) : [val]
+    } catch {
+      const parts = val.split(/[,\n]+/).map((s) => s.trim()).filter(Boolean)
+      return parts.length > 1 ? parts : [val]
+    }
+  }
   return val
+}
+
+/**
+ * Walk backwards through nodes that have no outputs (e.g. `approve`), returning
+ * the first ancestor that actually produced outputs. Applies intermediate wire
+ * remappings along the way.
+ */
+function getTransitiveOutputs(
+  nodeId: string,
+  flow: FlowSpec,
+  nodeOutputs: Record<string, Record<string, string | string[]>>,
+  seen = new Set<string>(),
+): Record<string, string | string[]> {
+  if (seen.has(nodeId)) return {}
+  seen.add(nodeId)
+
+  const direct = nodeOutputs[nodeId] ?? {}
+  if (Object.keys(direct).length > 0) return direct
+
+  // Node produced nothing (e.g. approve) — collect from its own upstreams
+  const merged: Record<string, string | string[]> = {}
+  for (const e of flow.edges) {
+    if (e.to !== nodeId) continue
+    const up = getTransitiveOutputs(e.from, flow, nodeOutputs, new Set(seen))
+    if (e.wire) {
+      for (const [fk, tk] of Object.entries(e.wire)) {
+        if (fk in up) merged[tk] = up[fk]
+      }
+    } else {
+      Object.assign(merged, up)
+    }
+  }
+  return merged
 }
 
 // ─── Input resolution ─────────────────────────────────────────────────────────
@@ -49,7 +91,8 @@ function coerce(val: string | string[], targetType: IOType): string | string[] {
 /**
  * Resolve all inputs for a node:
  * 1. Hardcoded params from flow spec (with template var substitution)
- * 2. Upstream outputs matched via edge wires (explicit) or key-name (auto)
+ * 2. Upstream outputs matched via edge wires (explicit) or key-name (auto).
+ *    Transparent for zero-output nodes like `approve` (transitive walk).
  * 3. User-entered overrides (highest priority)
  */
 function resolveInputs(
@@ -67,21 +110,16 @@ function resolveInputs(
     const substituted = substituteVars(v, templateVars)
     const inputDef = cap?.inputs.find((i) => i.key === k)
     if (inputDef?.type === 'string[]') {
-      try {
-        const parsed = JSON.parse(substituted)
-        result[k] = Array.isArray(parsed) ? parsed.map(String) : [substituted]
-      } catch {
-        result[k] = [substituted]
-      }
+      result[k] = coerce(substituted, 'string[]')
     } else {
       result[k] = substituted
     }
   }
 
-  // 2. Upstream wiring
+  // 2. Upstream wiring (with transitive pass-through for zero-output nodes)
   for (const edge of flow.edges) {
     if (edge.to !== node.id) continue
-    const upstreamOutputs = nodeOutputs[edge.from] ?? {}
+    const upstreamOutputs = getTransitiveOutputs(edge.from, flow, nodeOutputs)
 
     if (edge.wire) {
       // Explicit: { fromOutputKey: toInputKey }
@@ -107,12 +145,7 @@ function resolveInputs(
     if (v.trim() !== '') {
       const inputDef = cap?.inputs.find((i) => i.key === k)
       if (inputDef?.type === 'string[]') {
-        try {
-          const parsed = JSON.parse(v)
-          result[k] = Array.isArray(parsed) ? parsed.map(String) : [v]
-        } catch {
-          result[k] = [v]
-        }
+        result[k] = coerce(v, 'string[]')
       } else {
         result[k] = v
       }
