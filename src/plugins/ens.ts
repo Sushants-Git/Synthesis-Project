@@ -18,7 +18,7 @@ export const ENSPlugin: Plugin = {
       params: [
         { key: 'ens_name', label: 'ENS Name', placeholder: 'vitalik.eth', inputType: 'ens_name', required: true },
       ],
-      outputs: ['resolved_address', 'address', 'ens_name'],
+      outputs: ['resolved_address', 'address', 'ens_name', 'to'],
     },
     {
       action: 'lookup_address',

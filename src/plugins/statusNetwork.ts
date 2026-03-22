@@ -79,7 +79,6 @@ export const StatusNetworkPlugin: Plugin = {
               value: '0x' + valueWei.toString(16),
               data: params.data ?? '0x',
               gasPrice: '0x0',  // Gasless!
-              gas: '0x0',
             }],
           })) as string
 
@@ -107,7 +106,6 @@ export const StatusNetworkPlugin: Plugin = {
               from,
               data: bytecode,
               gasPrice: '0x0',
-              gas: '0x0',
             }],
           })) as string
 

@@ -123,8 +123,7 @@ export default function FlowExecutor({ flow, onClose, onModify }: Props) {
     try {
       const addr = await connectWallet()
       setWalletAddress(addr)
-      ctx.walletAddress = addr
-      ctx.resolved.wallet_address = addr
+      setCtx((prev) => ({ ...prev, walletAddress: addr, resolved: { ...prev.resolved, wallet_address: addr } }))
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Failed to connect wallet')
     }
@@ -381,8 +380,8 @@ export default function FlowExecutor({ flow, onClose, onModify }: Props) {
                       )
                     }
 
-                    // User entered value
-                    if (userVal) {
+                    // User entered value — show as badge only after step has run
+                    if (userVal && step.status !== 'pending' && step.status !== 'waiting') {
                       return (
                         <div key={field.key} className="flex items-center gap-2">
                           <span className="text-[10px] text-zinc-400 w-24 shrink-0 truncate">{field.label ?? field.key}</span>
@@ -393,8 +392,8 @@ export default function FlowExecutor({ flow, onClose, onModify }: Props) {
                       )
                     }
 
-                    // Needs manual input
-                    if (needsManual && (step.status === 'pending' || step.status === 'waiting')) {
+                    // Needs manual input (or user is still editing)
+                    if ((needsManual || userVal) && (step.status === 'pending' || step.status === 'waiting')) {
                       return (
                         <div key={field.key}>
                           <label className="text-[9px] text-zinc-400 uppercase tracking-wide block mb-0.5">
