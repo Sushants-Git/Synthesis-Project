@@ -11,7 +11,7 @@ export const EXAMPLE_FLOW: FlowSpec = {
       action: 'resolve_name',
       label: 'Resolve ENS Name',
       description: 'Convert vitalik.eth → 0x address',
-      params: { ens_name: 'vitalik.eth' },
+      params: { name: 'vitalik.eth' },
     },
     {
       id: 'n2',
@@ -31,7 +31,7 @@ export const EXAMPLE_FLOW: FlowSpec = {
     },
   ],
   edges: [
-    { from: 'n1', to: 'n2', label: 'resolved_address' },
-    { from: 'n2', to: 'n3', label: 'ens_name' },
+    { from: 'n1', to: 'n2' },
+    { from: 'n2', to: 'n3' },
   ],
 }
