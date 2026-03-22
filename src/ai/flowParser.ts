@@ -1,41 +1,25 @@
 import { chat } from './index.ts'
-
-export type NodeType =
-  | 'wallet'
-  | 'ens_resolve'
-  | 'api_call'
-  | 'approval_gate'
-  | 'action'
-  | 'output'
-  | 'filter'
-  | 'twitter_search'
-
-export type ExecutionType =
-  | 'eth_transfer'
-  | 'ens_resolve'
-  | 'twitter_search'
-  | 'approval'
-  | 'api_call'
-  | null
+import { buildPluginContext } from '../plugins/registry.ts'
 
 export interface InputField {
   key: string
   label: string
   placeholder: string
-  inputType: 'address' | 'eth_amount' | 'text' | 'ens_name'
+  inputType: 'address' | 'eth_amount' | 'text' | 'ens_name' | 'select'
 }
 
 export interface FlowNode {
   id: string
-  type: NodeType
+  /** Which plugin handles this node. Use "system" for generic flow control. */
+  plugin: string
+  /** Which action of that plugin to call */
+  action: string
   label: string
   description: string
-  executionType?: ExecutionType
   /** Values extracted directly from the user's prompt */
   params?: Record<string, string>
-  /** Fields the user must fill in (only what's genuinely missing from the prompt) */
+  /** Fields the user must fill in — only what's genuinely missing from the prompt */
   requiredInputs?: InputField[]
-  meta?: Record<string, string>
 }
 
 export interface FlowEdge {
@@ -51,49 +35,52 @@ export interface FlowSpec {
   edges: FlowEdge[]
 }
 
-const SYSTEM_PROMPT = `You are FlowTx, a visual blockchain transaction planner. Given a natural language description, output a structured JSON FlowSpec representing the execution steps.
+function buildSystemPrompt(): string {
+  return `You are FlowTx — a visual blockchain transaction composer. Given a natural language intent, compose a step-by-step flow using the available plugins.
+
+AVAILABLE PLUGINS:
+${buildPluginContext()}
+
+SYSTEM NODES (plugin: "system"):
+- action: "output" — shows the final result/confirmation (always end with this)
+- action: "filter" — filter or rank a list of results
+- action: "note" — display information to the user
 
 OUTPUT FORMAT — return ONLY valid JSON, no markdown, no explanation:
 {
   "title": "Short title (3-5 words)",
-  "description": "One sentence summary",
+  "description": "One sentence what this flow does",
   "nodes": [
     {
       "id": "n1",
-      "type": "wallet|ens_resolve|api_call|approval_gate|action|output|filter|twitter_search",
-      "label": "Short label (2-4 words)",
-      "description": "What this step does",
-      "executionType": "eth_transfer|ens_resolve|twitter_search|approval|api_call|null",
-      "params": { "key": "value extracted from prompt" },
+      "plugin": "metamask",
+      "action": "connect_wallet",
+      "label": "Connect Wallet",
+      "description": "Connect MetaMask to get wallet address",
+      "params": { "key": "value extracted from the user prompt" },
       "requiredInputs": [
-        { "key": "fieldKey", "label": "Human label", "placeholder": "e.g. 0.1", "inputType": "address|eth_amount|text|ens_name" }
+        { "key": "amount", "label": "Amount (ETH)", "placeholder": "0.5", "inputType": "eth_amount" }
       ]
     }
   ],
-  "edges": [{ "from": "n1", "to": "n2", "label": "optional" }]
+  "edges": [
+    { "from": "n1", "to": "n2", "label": "optional edge label" }
+  ]
 }
 
-NODE TYPES:
-- wallet: the user's connected wallet (source of funds)
-- ens_resolve: resolve an ENS name to an address (executionType: "ens_resolve")
-- approval_gate: user must approve before funds move (executionType: "approval")
-- action: executes a blockchain transaction (executionType: "eth_transfer" for ETH sends)
-- twitter_search: searches Twitter for criteria (executionType: "twitter_search")
-- filter: filter/rank results
-- output: shows the result/confirmation
-- api_call: external API call
+COMPOSITION RULES:
+1. Extract ALL values from the user's prompt into "params" (amounts, names, addresses, criteria). "requiredInputs" is only for genuinely missing values.
+2. If the recipient is an ENS name, always include an ens:resolve_name node before metamask:send_eth.
+3. Always include metamask:approve before any fund movement (send_eth, deploy_contract, send_gasless_tx).
+4. Always end with system:output.
+5. Use self:verify_identity as a gate when sending to unknown people found via twitter search.
+6. Prefer status:send_gasless_tx for small or frequent transfers — it's free.
+7. Nodes should flow left to right in a logical sequence.
+8. Choose plugins that maximize prize track coverage given the user's intent.
 
-RULES:
-1. Extract ALL values from the prompt into params (amount, ENS names, addresses, criteria)
-2. Only put in requiredInputs what's GENUINELY missing from the prompt
-3. Always include an approval_gate before any fund transfer
-4. If a recipient is an ENS name, include an ens_resolve node before the action
-5. Always end with an output node showing confirmation
-6. The wallet node should have params.action describing what it will do
-7. For ETH transfers: action node params must include "amount" (in ETH) and "to" (address or ENS)
-
-EXAMPLE — "send 0.5 ETH to vitalik.eth":
-nodes: wallet(params:{action:"send 0.5 ETH"}) → ens_resolve(params:{ens_name:"vitalik.eth"}, executionType:"ens_resolve") → approval_gate(params:{amount:"0.5",to:"vitalik.eth"}, executionType:"approval") → action(params:{amount:"0.5",to:"vitalik.eth"}, executionType:"eth_transfer") → output`
+EXAMPLE — "send 0.5 ETH to the best ZK builder on Twitter":
+nodes: metamask:connect_wallet → twitter:search_users(query:"best ZK builder") → twitter:user_approval → self:verify_identity → ens:resolve_name → metamask:approve → metamask:send_eth(amount:"0.5") → system:output`
+}
 
 function extractJSON(text: string): string {
   const match = text.match(/```(?:json)?\s*([\s\S]*?)```/)
@@ -104,12 +91,12 @@ function extractJSON(text: string): string {
 export async function parseIntent(prompt: string): Promise<FlowSpec> {
   const response = await chat(
     [{ role: 'user', content: prompt }],
-    SYSTEM_PROMPT,
+    buildSystemPrompt(),
   )
 
   try {
     return JSON.parse(extractJSON(response.content)) as FlowSpec
   } catch {
-    throw new Error(`Failed to parse AI response as FlowSpec: ${response.content}`)
+    throw new Error(`Failed to parse AI response as FlowSpec:\n${response.content}`)
   }
 }

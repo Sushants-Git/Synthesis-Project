@@ -5,6 +5,7 @@ interface Props {
   screenY: number
   mode: 'create' | 'modify'
   loading: boolean
+  initialValue?: string
   onSubmit: (prompt: string) => void
   onClose: () => void
 }
@@ -14,10 +15,11 @@ export default function FloatingPrompt({
   screenY,
   mode,
   loading,
+  initialValue = '',
   onSubmit,
   onClose,
 }: Props) {
-  const [value, setValue] = useState('')
+  const [value, setValue] = useState(initialValue)
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {

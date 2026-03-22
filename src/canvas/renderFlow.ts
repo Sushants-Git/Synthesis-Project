@@ -1,5 +1,6 @@
 import { createShapeId, toRichText, type Editor, type TLShapeId } from '@tldraw/tldraw'
-import type { FlowSpec, FlowNode, NodeType } from '../ai/flowParser.ts'
+import type { FlowSpec, FlowNode } from '../ai/flowParser.ts'
+import { getPlugin } from '../plugins/registry.ts'
 
 const NODE_W = 200
 const NODE_H = 80
@@ -7,55 +8,37 @@ const H_GAP = 90
 const PADDING = 32
 const HEADER_H = 36
 
-const TYPE_ICON: Record<string, string> = {
-  wallet: '💼',
-  ens_resolve: '🔍',
-  approval_gate: '🔐',
-  action: '⚡',
-  output: '✅',
-  filter: '🔀',
-  api_call: '🌐',
-  twitter_search: '🐦',
+function pluginColor(node: FlowNode): string {
+  const plugin = getPlugin(node.plugin)
+  if (plugin) return plugin.color
+  // fallback for system nodes
+  if (node.action === 'output') return 'light-blue'
+  if (node.action === 'filter') return 'red'
+  return 'grey'
 }
 
-function nodeColor(type: NodeType | string): string {
-  const map: Record<string, string> = {
-    wallet: 'blue',
-    ens_resolve: 'violet',
-    api_call: 'violet',
-    approval_gate: 'orange',
-    action: 'green',
-    output: 'light-blue',
-    filter: 'red',
-    twitter_search: 'light-blue',
-  }
-  return map[type] ?? 'grey'
+function pluginIcon(node: FlowNode): string {
+  const plugin = getPlugin(node.plugin)
+  return plugin?.icon ?? '▸'
 }
 
-/** Format a node label with its key params for display on the canvas */
 function nodeLabel(node: FlowNode): string {
-  const icon = TYPE_ICON[node.type] ?? '▸'
+  const icon = pluginIcon(node)
   const title = `${icon} ${node.label}`
-
-  const keyParams: string[] = []
   const params = node.params ?? {}
 
-  if (params.amount) keyParams.push(`${params.amount} ETH`)
-  if (params.to) keyParams.push(`→ ${params.to}`)
-  if (params.ens_name) keyParams.push(params.ens_name)
-  if (params.action && !params.amount) keyParams.push(params.action)
+  const highlights: string[] = []
+  if (params.amount) highlights.push(`${params.amount} ETH`)
+  if (params.to) highlights.push(`→ ${params.to}`)
+  if (params.ens_name) highlights.push(params.ens_name)
+  if (params.query) highlights.push(`"${params.query}"`)
+  if (params.max_amount) highlights.push(`max ${params.max_amount} ETH`)
+  if (params.credential) highlights.push(params.credential)
 
-  return keyParams.length > 0 ? `${title}\n${keyParams.join('  ')}` : title
+  return highlights.length > 0 ? `${title}\n${highlights.join('  ')}` : title
 }
 
-/**
- * Renders a FlowSpec into an existing tldraw Frame.
- */
-export function renderFlowIntoFrame(
-  editor: Editor,
-  flow: FlowSpec,
-  frameId: TLShapeId,
-) {
+export function renderFlowIntoFrame(editor: Editor, flow: FlowSpec, frameId: TLShapeId) {
   const frame = editor.getShape(frameId)
   if (!frame) return
 
@@ -79,7 +62,7 @@ export function renderFlowIntoFrame(
     const y = PADDING
     posMap[node.id] = { x, y }
 
-    const isDiamond = node.type === 'approval_gate'
+    const isApproval = node.action === 'approve' || node.action === 'user_approval'
     editor.createShape({
       id: createShapeId(`${frameId}-${node.id}`),
       type: 'geo',
@@ -87,12 +70,12 @@ export function renderFlowIntoFrame(
       x,
       y,
       props: {
-        geo: isDiamond ? 'diamond' : 'rectangle',
+        geo: isApproval ? 'diamond' : 'rectangle',
         w: NODE_W,
-        h: isDiamond ? NODE_H * 1.3 : NODE_H,
+        h: isApproval ? NODE_H * 1.3 : NODE_H,
         richText: toRichText(nodeLabel(node)),
         fill: 'solid',
-        color: nodeColor(node.type),
+        color: pluginColor(node),
         size: 's',
         font: 'sans',
         align: 'middle',
@@ -133,9 +116,6 @@ export function renderFlowIntoFrame(
   }
 }
 
-/**
- * Creates a new frame at the given page position, then renders the flow into it.
- */
 export function renderFlowAtPoint(
   editor: Editor,
   flow: FlowSpec,
