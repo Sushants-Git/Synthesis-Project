@@ -1,17 +1,16 @@
 export const config = { runtime: 'edge' }
 
-export default async function handler(req: Request): Promise<Response> {
+export default async function handler(req) {
   const url = new URL(req.url)
-  const targetPath = url.pathname.replace(/^\/api\/openai/, '')
-  const targetUrl = `https://api.openai.com${targetPath}${url.search}`
-
-  const headers = new Headers()
-  headers.set('Authorization', `Bearer ${process.env.VITE_OPENAI_API_KEY}`)
-  headers.set('Content-Type', 'application/json')
+  const targetPath = url.pathname.replace(/^\/api\/twitter/, '')
+  const targetUrl = `https://api.twitter.com${targetPath}${url.search}`
 
   const response = await fetch(targetUrl, {
     method: req.method,
-    headers,
+    headers: {
+      'Authorization': `Bearer ${process.env.VITE_TWITTER_BEARER_TOKEN}`,
+      'Content-Type': 'application/json',
+    },
     body: req.method !== 'GET' && req.method !== 'HEAD' ? req.body : undefined,
   })
 
