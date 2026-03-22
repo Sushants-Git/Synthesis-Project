@@ -93,10 +93,14 @@ export const ENSPlugin: Plugin = {
         const addresses = succeeded.map((r) => r.address as string)
         const mapping = Object.fromEntries(succeeded.map((r) => [r.name, r.address as string]))
 
+        const addressesJson = JSON.stringify(addresses)
         return {
           status: 'done',
           outputs: {
-            addresses: JSON.stringify(addresses),
+            addresses: addressesJson,
+            // Override wallets/rows so downstream batch_send gets hex addresses, not ENS names
+            wallets: addressesJson,
+            rows: addressesJson,
             mapping: JSON.stringify(mapping),
             count: String(succeeded.length),
           },
