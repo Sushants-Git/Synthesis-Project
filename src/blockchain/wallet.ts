@@ -40,9 +40,37 @@ export async function getChainId(): Promise<number> {
   return parseInt(chainId, 16)
 }
 
+const SEPOLIA_CHAIN_ID = '0xaa36a7' // 11155111
+
+/** Switch MetaMask to Sepolia testnet, adding it if needed. */
+async function switchToSepolia(): Promise<void> {
+  try {
+    await window.ethereum?.request({
+      method: 'wallet_switchEthereumChain',
+      params: [{ chainId: SEPOLIA_CHAIN_ID }],
+    })
+  } catch (e) {
+    // Chain not added yet — add it
+    if ((e as { code?: number }).code === 4902) {
+      await window.ethereum?.request({
+        method: 'wallet_addEthereumChain',
+        params: [{
+          chainId: SEPOLIA_CHAIN_ID,
+          chainName: 'Sepolia Testnet',
+          rpcUrls: ['https://rpc.sepolia.org'],
+          nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
+          blockExplorerUrls: ['https://sepolia.etherscan.io'],
+        }],
+      })
+    }
+  }
+}
+
 /** Send ETH. amount is in ETH (e.g. "0.5"). Returns tx hash. */
 export async function sendETH(from: string, to: string, amountEth: string): Promise<string> {
   if (!window.ethereum) throw new Error('No wallet found.')
+
+  await switchToSepolia()
 
   // Parse ETH to wei (BigInt)
   const amountWei = BigInt(Math.round(parseFloat(amountEth) * 1e18))

@@ -716,7 +716,7 @@ export default function FlowExecutor({ flow, onClose, onModify }: Props) {
                 </div>
               )}
               {step.result?.txHash && (
-                <a href={step.result.link ?? `https://etherscan.io/tx/${step.result.txHash}`}
+                <a href={step.result.link ?? `https://sepolia.etherscan.io/tx/${step.result.txHash}`}
                   target="_blank" rel="noreferrer"
                   className="mx-3 mb-2 flex items-center gap-1 text-xs text-blue-500 hover:text-blue-700 transition-colors duration-100">
                   View transaction ↗

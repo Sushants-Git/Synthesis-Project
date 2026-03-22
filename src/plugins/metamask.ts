@@ -6,7 +6,7 @@ export const MetaMaskPlugin: Plugin = {
   name: 'MetaMask',
   description: 'Wallet connection, ETH transfers, and ERC-7715 delegations',
   aiDescription:
-    'MetaMask — wallet connection and ETH transfers on Ethereum mainnet. ' +
+    'MetaMask — wallet connection and ETH transfers on Ethereum Sepolia testnet. ' +
     'approve() is a pure gate node (no inputs, no outputs) — always place it FIRST in any flow that sends ETH. ' +
     'connect_wallet() auto-connects if not already connected — only add it explicitly when the flow is just about connecting. ' +
     'send_eth: single recipient, requires "to" (0x address) and "amount" (ETH). ' +
@@ -117,7 +117,7 @@ export const MetaMaskPlugin: Plugin = {
             outputs: { tx_hash: txHash },
             display: txHash.slice(0, 10) + '…',
             txHash,
-            link: `https://etherscan.io/tx/${txHash}`,
+            link: `https://sepolia.etherscan.io/tx/${txHash}`,
           }
         } catch (e) {
           return { status: 'error', error: String(e) }
