@@ -8,22 +8,22 @@
 
 ---
 
-Describe what you want in plain English. CAN VVEE generates a visual flow diagram of every step needed — wallet connection, identity verification, ENS resolution, approvals, on-chain execution — and runs it step by step. No static UI. No form filling. Just intent.
+Describe what you want in plain English. CAN VVEE generates a visual flow diagram of every step needed — pulling data from Google Sheets or GitHub, scoring with AI, resolving ENS names, verifying identities, approving, and executing on-chain — all without writing a single line of code.
 
 ---
 
 ## How it works
 
 ```
-"Send 0.5 ETH to the best ZK builder on Twitter"
-                        ↓
-              AI parses your intent
-                        ↓
-  Draws a flow: Wallet → Twitter Search → Filter → Verify Identity → ENS Resolve → Approve → Send ETH
-                        ↓
-        You review the plan, approve each step
-                        ↓
-              Transaction executes on-chain
+"Fetch builders from this Google Sheet and send each one 0.005 ETH"
+                              ↓
+                    AI parses your intent
+                              ↓
+   Draws a flow: Google Sheets → ENS Resolve Batch → Approve → Batch Send ETH
+                              ↓
+             You review each step before funds move
+                              ↓
+                   Transaction executes on-chain
 ```
 
 ---
@@ -57,28 +57,57 @@ Describe what you want in plain English. CAN VVEE generates a visual flow diagra
 
 ## Example Flows
 
+**Sheet airdrop with ENS**
+> *"From [this Google Sheet](https://docs.google.com/...), get the ENS addresses from the Receivers column and send each of them 0.005 ETH"*
+```
+Google Sheets (Receivers column)
+  → ENS Resolve Batch          # resolves vitalik.eth → 0xd8dA...
+  → Approve                    # you review the recipient list
+  → Batch Send ETH (0.005 each)
+```
+
+**GitHub stars → ETH reward**
+> *"Here is a list of builder GitHub IDs — fetch their repos, and if any repo has more than 1000 stars and 'zk' in the name, send that builder 0.5 ETH"*
+```
+GitHub Get Repos (per handle)
+  → ChatGPT Filter             # "return true if stars > 1000 and name contains zk"
+  → Util Filter (keep matches)
+  → ENS Resolve Batch          # handle.eth
+  → Approve
+  → Batch Send ETH (0.5 each)
+```
+
+**Twitter scout → airdrop**
+> *"Search Twitter for the top ZK builders, score them using their last 10 tweets, and send the top 3 each 0.1 ETH"*
+```
+Twitter Search ("ZK builder")
+  → Twitter Get Batch Tweets   # fetches last 10 tweets per user
+  → ChatGPT Score              # "rate each builder 1–10 based on tweet quality"
+  → Util Filter (score ≥ 8)
+  → Approve
+  → Batch Send ETH (0.1 each)
+```
+
+**Identity-gated transfer**
+> *"Send 1 ETH to sushant.eth but only if they have a Self Protocol verified identity"*
+```
+ENS Resolve (sushant.eth → address)
+  → Self Protocol Verify       # checks for Self Pass / Agent ID
+  → Approve
+  → Send ETH (1 ETH)
+```
+
+**Gasless batch on Status Network**
+> *"Deploy a gasless airdrop to these 5 addresses on Status Network Sepolia"*
+```
+Google Sheets (wallet addresses)
+  → Status Network Batch Send  # no gas fees, testnet
+```
+
 **Simple transfer**
+> *"Send 0.1 ETH to vitalik.eth"*
 ```
-"Send 0.1 ETH to vitalik.eth"
-Wallet → ENS Resolve → Approve → Send ETH
-```
-
-**Sheet airdrop**
-```
-"Fetch addresses from this Google Sheet and send them each 0.01 ETH"
-Google Sheets → ENS Resolve Batch → Approve → Batch Send ETH
-```
-
-**Conditional transfer**
-```
-"Send 0.5 ETH to the best ZK builder on Twitter"
-Twitter Search → Get Profiles → ChatGPT Score → Filter → Approve → Send ETH
-```
-
-**Delegated agent action**
-```
-"Let my agent handle transfers under 0.01 ETH automatically"
-Wallet → Create Delegation (ERC-7715, max 0.01 ETH caveat) → Agent executes autonomously
+ENS Resolve → Approve → Send ETH
 ```
 
 ---
