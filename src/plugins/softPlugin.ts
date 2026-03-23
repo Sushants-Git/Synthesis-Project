@@ -178,10 +178,14 @@ export async function executeSoftPlugin(
 // ── Plugin factory ────────────────────────────────────────────────────────────
 
 export function buildSoftPlugin(def: SoftPluginDef): Plugin {
-  // Steps with a JS transform have dynamic outputs; steps without use click-mapped paths
-  const outputKeys = def.steps.flatMap((s) =>
-    s.transform?.trim() ? ['(dynamic — JS transform)'] : s.outputMappings.map((m) => m.key),
-  )
+  // Use declared outputMappings keys if present (works for both click-mapped and
+  // transform-based outputs once user clicks "Mark as step outputs").
+  // Fall back to a placeholder only if transform is active but nothing is declared yet.
+  const outputKeys = def.steps.flatMap((s) => {
+    if (s.outputMappings.length > 0) return s.outputMappings.map((m) => m.key)
+    if (s.transform?.trim()) return ['(run transform and click "Mark as step outputs")']
+    return []
+  })
 
   return {
     id: def.id,

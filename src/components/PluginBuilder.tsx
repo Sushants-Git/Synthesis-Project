@@ -117,10 +117,12 @@ const ICONS = ['🔌', '🌐', '📡', '🔗', '⚡', '🛰', '🔧', '📊', '�
 function StepEditor({
   step,
   availableVars,
+  pluginInputKeys,
   onUpdate,
 }: {
   step: ApiStepDef
   availableVars: string[]
+  pluginInputKeys: string[]
   onUpdate: (updated: ApiStepDef) => void
 }) {
   const [testing, setTesting] = useState(false)
@@ -308,25 +310,50 @@ function StepEditor({
         </button>
       </div>
 
-      {/* Available vars hint */}
-      {availableVars.length > 0 && (
-        <div className="px-4 pb-2 shrink-0">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-[9px] text-zinc-400 uppercase tracking-widest font-semibold">Available inputs</span>
-            <span className="text-[9px] text-zinc-300">from plugin inputs + previous steps</span>
-          </div>
-          <div className="flex flex-wrap gap-1">
-            {availableVars.map((v) => (
-              <code
-                key={v}
-                className="text-[9px] font-mono bg-amber-50 text-amber-700 border border-amber-200 rounded px-1.5 leading-5 cursor-pointer hover:bg-amber-100 transition-colors"
-                title={`Click to copy {{${v}}}`}
-                onClick={() => navigator.clipboard.writeText(`{{${v}}}`)}
-              >
-                {`{{${v}}}`}
-              </code>
-            ))}
-          </div>
+      {/* Available vars + declared outputs */}
+      {(availableVars.length > 0 || step.outputMappings.length > 0) && (
+        <div className="px-4 pb-2 shrink-0 space-y-1.5">
+          {availableVars.length > 0 && (
+            <div>
+              <div className="flex items-center gap-1.5 mb-1">
+                <span className="text-[8px] text-amber-600 uppercase tracking-widest font-semibold">IN</span>
+                <span className="text-[9px] text-zinc-400">
+                  {pluginInputKeys.length > 0 && availableVars.some(v => pluginInputKeys.includes(v))
+                    ? 'plugin inputs + previous step outputs — click to copy'
+                    : 'from previous steps — click to copy'}
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {availableVars.map((v) => (
+                  <code
+                    key={v}
+                    className={`text-[9px] font-mono border rounded px-1.5 leading-5 cursor-pointer transition-colors ${
+                      pluginInputKeys.includes(v)
+                        ? 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
+                        : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
+                    }`}
+                    title={`Click to copy {{${v}}}`}
+                    onClick={() => navigator.clipboard.writeText(`{{${v}}}`)}
+                  >
+                    {`{{${v}}}`}
+                  </code>
+                ))}
+              </div>
+            </div>
+          )}
+          {step.outputMappings.length > 0 && (
+            <div>
+              <span className="text-[8px] text-emerald-600 uppercase tracking-widest font-semibold">OUT </span>
+              <span className="text-[9px] text-zinc-400">declared outputs from this step</span>
+              <div className="flex flex-wrap gap-1 mt-1">
+                {step.outputMappings.map((m) => (
+                  <span key={m.key} className="text-[9px] font-mono bg-emerald-50 text-emerald-700 border border-emerald-200 rounded px-1.5 leading-5">
+                    {m.key}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -470,8 +497,25 @@ function StepEditor({
             {/* Transform result */}
             {transformResult && (
               <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3">
-                <div className="text-[9px] text-emerald-600 uppercase tracking-widest font-medium mb-2">
-                  Output keys ({Object.keys(transformResult).length})
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-[9px] text-emerald-600 uppercase tracking-widest font-medium">
+                    Output keys ({Object.keys(transformResult).length})
+                  </div>
+                  <button
+                    onClick={() => {
+                      const newMappings = Object.keys(transformResult)
+                        .filter((k) => transformResult[k] !== undefined)
+                        .map((k) => ({
+                          path: k,
+                          key: k,
+                          label: k.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase()),
+                        }))
+                      onUpdate({ ...step, outputMappings: newMappings })
+                    }}
+                    className="text-[9px] font-medium text-emerald-700 bg-emerald-100 hover:bg-emerald-200 border border-emerald-300 rounded-md px-2 py-0.5 transition-colors active:scale-[0.97]"
+                  >
+                    ← Mark as step outputs
+                  </button>
                 </div>
                 <div className="space-y-1">
                   {Object.entries(transformResult).map(([k, v]) => {
@@ -486,7 +530,7 @@ function StepEditor({
                         <code className="text-[10px] font-mono text-emerald-700 shrink-0">{k}:</code>
                         <span className={`text-[10px] font-mono break-all ${isUndefined ? 'text-amber-500' : 'text-zinc-600'}`}>
                           {display}
-                          {isUndefined && <span className="ml-1 text-[9px] text-amber-400">(key exists but value is undefined)</span>}
+                          {isUndefined && <span className="ml-1 text-[9px] text-amber-400">(undefined — won't be an output)</span>}
                         </span>
                       </div>
                     )
@@ -914,6 +958,7 @@ export default function PluginBuilder({ initial, onSave, onClose }: Props) {
                   key={selectedStep.id}
                   step={selectedStep}
                   availableVars={getAvailableVars(selectedStepIndex)}
+                  pluginInputKeys={inputs.map((i) => i.key).filter(Boolean)}
                   onUpdate={updateStep}
                 />
               ) : (
