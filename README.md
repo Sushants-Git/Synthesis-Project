@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="./public/banner.png" alt="CAN VVEE banner" width="100%" />
+  <img src="./public/header.png" alt="CAN VVEE banner" width="100%" />
   <br /><br />
   <img src="./public/favicon.png" alt="CAN VVEE logo" width="64" />
   <h1>CAN VVEE</h1>
