@@ -13,6 +13,26 @@
 
 ---
 
+## Demo
+
+[![CAN VVEE Demo](https://img.youtube.com/vi/LZ7WyFWa1l0/maxresdefault.jpg)](https://www.youtube.com/watch?v=LZ7WyFWa1l0)
+
+---
+
+## Screenshots
+
+<div align="center">
+  <img src="https://assets.devfolio.co/content/5a62929d00054c6c809073fa9aa56d57/f4c3fa01-0615-48b2-8583-8085a1d2a8a9.png" width="49%" />
+  <img src="https://assets.devfolio.co/content/5a62929d00054c6c809073fa9aa56d57/c57c836e-a300-4939-8b50-f17984c4e92d.png" width="49%" />
+  <br /><br />
+  <img src="https://assets.devfolio.co/content/5a62929d00054c6c809073fa9aa56d57/394b13b6-2edc-49be-854c-16ca983bf723.png" width="49%" />
+  <img src="https://assets.devfolio.co/content/5a62929d00054c6c809073fa9aa56d57/10a6c073-60a3-459e-b350-95dd53f371f9.png" width="49%" />
+  <br /><br />
+  <img src="https://assets.devfolio.co/content/5a62929d00054c6c809073fa9aa56d57/e2c71a3c-6a44-476c-a46c-4886d7356676.png" width="49%" />
+</div>
+
+---
+
 ## The problem
 
 If you've ever run a hackathon, a grant round, or any kind of crypto distribution — you know the pain.
@@ -205,6 +225,7 @@ npm run dev
 | Action | How |
 |--------|-----|
 | Create a flow | Double-click the canvas (or press `F` and draw a frame), type your intent |
+| Pin a specific plugin | Type `@` in the prompt to get a plugin picker — the AI will use that plugin in the flow |
 | Execute | Click the flow → **⚡ Execute** |
 | Modify | Click the flow → **Modify** → edit JSON or continue in chat |
 | Add a single block | Click any action in the sidebar → **+ add** |
